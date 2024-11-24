@@ -810,5 +810,3 @@ local args = {
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
 task.wait(0.5)
-
-end
