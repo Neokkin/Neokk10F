@@ -239,8 +239,8 @@ local args = {
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
 local args = {
-    [1] = "Darkness",
-    [2] = "Darkness"
+    [1] = "Dark",
+    [2] = "Dark"
 }
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
@@ -324,7 +324,7 @@ local args = {
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
 local args = {
     [1] = "Plant",
-    [2] = "Darkness"
+    [2] = "Dark"
 }
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
@@ -342,7 +342,7 @@ local args = {
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
 local args = {
     [1] = "Supernova",
-    [2] = "Darkness"
+    [2] = "Dark"
 }
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
@@ -390,13 +390,13 @@ local args = {
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
 local args = {
     [1] = "Life",
-    [2] = "Darkness"
+    [2] = "Dark"
 }
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
 local args = {
     [1] = "Leaves",
-    [2] = "Darkness"
+    [2] = "Dark"
 }
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
@@ -486,7 +486,7 @@ local args = {
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
 local args = {
     [1] = "Angel",
-    [2] = "Darkness"
+    [2] = "Dark"
 }
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
