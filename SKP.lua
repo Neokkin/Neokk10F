@@ -742,3 +742,63 @@ local args = {
 }
 
 game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "FlyingPunch",
+    [2] = "Mana"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "Frostbite",
+    [2] = "Dragon"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "Fairy",
+    [2] = "Steel"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "Demon",
+    [2] = "Eclipse"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "Bomb",
+    [2] = "Magnet"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "Tornado",
+    [2] = "Water"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "Demon",
+    [2] = "Crystal"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "Beanstalk",
+    [2] = "Void"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "Wildfire",
+    [2] = "Magic"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
+local args = {
+    [1] = "LavaRain",
+    [2] = "Earthquake"
+}
+
+game:GetService("ReplicatedStorage").Remotes.Ability.Merge:InvokeServer(unpack(args))
