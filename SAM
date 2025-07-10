@@ -1,0 +1,226 @@
+
+local player = game.Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- 🧹 Remove old GUI
+local oldGui = playerGui:FindFirstChild("MagicTeleportGui")
+if oldGui then oldGui:Destroy() end
+
+-- 🖼️ Create GUI
+local gui = Instance.new("ScreenGui")
+gui.Name = "MagicTeleportGui"
+gui.ResetOnSpawn = false
+gui.Parent = playerGui
+
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 280, 0, 240)
+frame.Position = UDim2.new(0.5, -140, 0.5, -120)
+frame.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+frame.BorderSizePixel = 2
+frame.Active = true
+frame.Draggable = true
+frame.Parent = gui
+
+local title = Instance.new("TextLabel", frame)
+title.Size = UDim2.new(1, -20, 0, 30)
+title.Position = UDim2.new(0, 0, 0, 0)
+title.Text = "Magic Teleport"
+title.TextColor3 = Color3.new(1,1,1)
+title.BackgroundTransparency = 1
+title.Font = Enum.Font.SourceSansBold
+title.TextSize = 18
+
+local minimizeBtn = Instance.new("TextButton", frame)
+minimizeBtn.Size = UDim2.new(0, 20, 0, 30)
+minimizeBtn.Position = UDim2.new(1, -20, 0, 0)
+minimizeBtn.Text = "-"
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+minimizeBtn.TextColor3 = Color3.new(1,1,1)
+minimizeBtn.Font = Enum.Font.SourceSansBold
+minimizeBtn.TextSize = 20
+
+local dropdownLabel = Instance.new("TextLabel", frame)
+dropdownLabel.Size = UDim2.new(1, -20, 0, 20)
+dropdownLabel.Position = UDim2.new(0, 10, 0, 40)
+dropdownLabel.Text = "Select Target:"
+dropdownLabel.TextColor3 = Color3.new(1,1,1)
+dropdownLabel.BackgroundTransparency = 1
+dropdownLabel.Font = Enum.Font.SourceSans
+dropdownLabel.TextSize = 16
+dropdownLabel.TextXAlignment = Enum.TextXAlignment.Left
+
+-- 🔽 Scrollable dropdown
+local dropdownFrame = Instance.new("ScrollingFrame", frame)
+dropdownFrame.Size = UDim2.new(1, -20, 0, 120)
+dropdownFrame.Position = UDim2.new(0, 10, 0, 65)
+dropdownFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+dropdownFrame.BorderSizePixel = 1
+dropdownFrame.ScrollBarThickness = 8
+dropdownFrame.AutomaticCanvasSize = Enum.AutomaticSize.Y
+dropdownFrame.ScrollingDirection = Enum.ScrollingDirection.Y
+dropdownFrame.ClipsDescendants = true
+
+local listLayout = Instance.new("UIListLayout", dropdownFrame)
+listLayout.SortOrder = Enum.SortOrder.Name
+listLayout.Padding = UDim.new(0, 4)
+
+local padding = Instance.new("UIPadding", dropdownFrame)
+padding.PaddingTop = UDim.new(0, 4)
+padding.PaddingBottom = UDim.new(0, 4)
+padding.PaddingLeft = UDim.new(0, 4)
+padding.PaddingRight = UDim.new(0, 4)
+
+local selectedChild = nil
+local function refreshDropdown()
+	dropdownLabel.Text = selectedChild and ("Selected: " .. selectedChild.Name) or "Select Target:"
+
+	-- Clear old buttons
+	for _, child in ipairs(dropdownFrame:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+
+	local magicsFolder = workspace:FindFirstChild("World") and workspace.World:FindFirstChild("MagicsIR")
+	if not magicsFolder then
+		warn("MagicsIR folder not found in workspace.World.")
+		return
+	end
+
+	for _, child in ipairs(magicsFolder:GetChildren()) do
+		if child:IsA("Model") and child:FindFirstChild("HumanoidRootPart") then
+			local itemBtn = Instance.new("TextButton")
+			itemBtn.Size = UDim2.new(1, -8, 0, 24)
+			itemBtn.Text = child.Name
+			itemBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+			itemBtn.TextColor3 = Color3.new(1,1,1)
+			itemBtn.Font = Enum.Font.SourceSans
+			itemBtn.TextSize = 14
+			itemBtn.AutoButtonColor = true
+			itemBtn.Parent = dropdownFrame
+
+			itemBtn.MouseButton1Click:Connect(function()
+				selectedChild = child
+				dropdownLabel.Text = "Selected: " .. child.Name
+			end)
+		end
+	end
+end
+
+-- 🔁 Refresh every 2 seconds
+task.spawn(function()
+	while true do
+		refreshDropdown()
+		task.wait(2)
+	end
+end)
+
+-- 🚀 Teleport button
+local teleportButton = Instance.new("TextButton", frame)
+teleportButton.Size = UDim2.new(1, -20, 0, 30)
+teleportButton.Position = UDim2.new(0, 10, 0, 200)
+teleportButton.Text = "Teleport & Trigger"
+teleportButton.BackgroundColor3 = Color3.fromRGB(100, 100, 100)
+teleportButton.TextColor3 = Color3.new(1,1,1)
+teleportButton.Font = Enum.Font.SourceSansBold
+teleportButton.TextSize = 16
+	
+	
+
+-- 🔽 Improved Minimize logic with frame resizing
+local TweenService = game:GetService("TweenService")
+local originalSize = frame.Size
+local minimizedSize = UDim2.new(0, 280, 0, 30)
+local tweenInfo = TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+local minimized = false
+
+minimizeBtn.MouseButton1Click:Connect(function()
+	minimized = not minimized
+
+	if minimized then
+		-- Hide all except title and minimize button
+		for _, obj in ipairs(frame:GetChildren()) do
+			if obj ~= title and obj ~= minimizeBtn then
+				obj.Visible = false
+			end
+		end
+		minimizeBtn.Text = "+"
+		TweenService:Create(frame, tweenInfo, {Size = minimizedSize}):Play()
+	else
+		local tween = TweenService:Create(frame, tweenInfo, {Size = originalSize})
+		tween:Play()
+		tween.Completed:Wait()
+		for _, obj in ipairs(frame:GetChildren()) do
+			if obj ~= title and obj ~= minimizeBtn then
+				obj.Visible = true
+			end
+		end
+		minimizeBtn.Text = "-"
+	end
+end)
+
+-- ✨ Teleport + Prompt Trigger
+teleportButton.MouseButton1Click:Connect(function()
+	local character = player.Character or player.CharacterAdded:Wait()
+	local hrp = character:FindFirstChild("HumanoidRootPart")
+	if not hrp then
+		warn("HumanoidRootPart not found on player character.")
+		return
+	end
+
+	local promptRootPart = selectedChild:FindFirstChild("HumanoidRootPart")
+local magicBallPrompt = promptRootPart and promptRootPart:FindFirstChild("ForMagicBallThings")
+
+	if selectedChild and selectedChild:FindFirstChild("HumanoidRootPart") and magicBallPrompt and magicBallPrompt:IsA("ProximityPrompt") and magicBallPrompt.Enabled then
+		local originalPos = hrp.Position
+		local targetPos = selectedChild.HumanoidRootPart.Position + Vector3.new(0, -7, 0)
+
+		-- 🚶‍♂️ Teleport below target
+		hrp.CFrame = CFrame.new(targetPos)
+		task.wait(0.25)
+
+		local distance = (hrp.Position - magicBallPrompt.Parent.Position).Magnitude
+		print("Distance to prompt:", distance)
+
+		if distance <= magicBallPrompt.MaxActivationDistance then
+	local wasDisabled = not magicBallPrompt.Enabled
+	if wasDisabled then
+		magicBallPrompt.Enabled = true
+		task.wait(0.1) -- Give it a moment to register
+	end
+
+	fireproximityprompt(magicBallPrompt)
+	print("✅ ProximityPrompt force-fired.")
+
+	if wasDisabled then
+		task.delay(0.1, function()
+			magicBallPrompt.Enabled = false
+		end)
+	end
+else
+	warn("⚠️ Too far from prompt to activate.")
+end
+
+		task.wait(1)
+		hrp.CFrame = CFrame.new(originalPos)
+	else
+		warn("Teleport or prompt activation failed. Check selection and setup.")
+	end
+end)
+		
+		task.spawn(function()
+	while true do
+		task.wait(5)
+
+		local magicsFolder = workspace:FindFirstChild("World") and workspace.World:FindFirstChild("MagicsIR")
+		if magicsFolder then
+			for _, descendant in ipairs(magicsFolder:GetDescendants()) do
+				if descendant:IsA("ProximityPrompt") and descendant.Name == "ForMagicBallThings" then
+					descendant.Enabled = true
+				end
+			end
+		else
+			warn("⚠️ MagicsIR folder not found in workspace.World.")
+		end
+	end
+end)
