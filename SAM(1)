@@ -1,0 +1,131 @@
+-- Destroy old GUI if it exists
+local player = game:GetService("Players").LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local existing = playerGui:FindFirstChild("PartModifierGUI")
+if existing then
+	existing:Destroy()
+end
+
+-- Create ScreenGui
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PartModifierGUI"
+screenGui.ResetOnSpawn = false
+screenGui.IgnoreGuiInset = true
+screenGui.Parent = playerGui
+
+-- Create Main Frame
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 240, 0, 100)
+frame.Position = UDim2.new(0.5, -120, 0.5, -50)
+frame.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
+frame.Parent = screenGui
+
+-- Title Label
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, 0, 0, 30)
+title.BackgroundTransparency = 1
+title.Text = "🔧 Part Modifier"
+title.TextColor3 = Color3.new(1, 1, 1)
+title.TextScaled = true
+title.Font = Enum.Font.SourceSansBold
+title.Parent = frame
+
+-- Toggle Button
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(1, -20, 0, 40)
+toggleButton.Position = UDim2.new(0, 10, 0, 35)
+toggleButton.Text = "Toggle: OFF"
+toggleButton.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+toggleButton.TextColor3 = Color3.new(1, 1, 1)
+toggleButton.TextScaled = true
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.Parent = frame
+
+-- Minimize Button
+local minimizeButton = Instance.new("TextButton")
+minimizeButton.Size = UDim2.new(0, 30, 0, 30)
+minimizeButton.Position = UDim2.new(1, -35, 0, 0)
+minimizeButton.Text = "-"
+minimizeButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+minimizeButton.TextColor3 = Color3.new(1, 1, 1)
+minimizeButton.TextScaled = true
+minimizeButton.Font = Enum.Font.SourceSansBold
+minimizeButton.Parent = frame
+
+-- State
+local toggled = false
+local minimized = false
+local originalStates = {}
+
+-- Apply changes
+local function applyChanges()
+	for _, part in pairs(workspace:GetDescendants()) do
+		if part:IsA("BasePart") and (part.Name == "LockBase" or part.Name == "RlClectzne") then
+			if not originalStates[part] then
+				originalStates[part] = {
+					Size = part.Size,
+					Transparency = part.Transparency,
+					CanCollide = part.CanCollide
+				}
+			end
+
+			if part.Name == "LockBase" then
+				part.Size = Vector3.new(0, 2048, 2048)
+				part.Transparency = 1
+				part.CanCollide = false
+			elseif part.Name == "RlClectzne" then
+				part.Size = Vector3.new(2048, 40, 2048)
+			end
+		end
+	end
+end
+
+-- Revert changes
+local function revertChanges()
+	for part, props in pairs(originalStates) do
+		if part and part:IsDescendantOf(workspace) then
+			part.Size = props.Size
+			part.Transparency = props.Transparency
+			part.CanCollide = props.CanCollide
+		end
+	end
+end
+
+-- Toggle logic
+toggleButton.MouseButton1Click:Connect(function()
+	toggled = not toggled
+	if toggled then
+		toggleButton.Text = "Toggle: ON"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(80, 255, 80)
+		applyChanges()
+	else
+		toggleButton.Text = "Toggle: OFF"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(255, 80, 80)
+		revertChanges()
+	end
+end)
+
+-- Minimize logic
+minimizeButton.MouseButton1Click:Connect(function()
+	minimized = not minimized
+	if minimized then
+		for _, child in pairs(frame:GetChildren()) do
+			if child:IsA("TextButton") and child ~= minimizeButton then
+				child.Visible = false
+			end
+		end
+		frame.Size = UDim2.new(0, 240, 0, 30)
+		minimizeButton.Text = "+"
+	else
+		for _, child in pairs(frame:GetChildren()) do
+			if child:IsA("TextButton") and child ~= minimizeButton then
+				child.Visible = true
+			end
+		end
+		frame.Size = UDim2.new(0, 240, 0, 100)
+		minimizeButton.Text = "-"
+	end
+end)
