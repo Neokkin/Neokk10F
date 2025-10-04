@@ -1,5 +1,5 @@
 --!native
---50/50 this breaks but it's a beta for a reason!
+-- https://github.com/78n/SimpleSpy 50/50 this breaks but it's a beta for a reason!
 
 if getgenv().SimpleSpyExecuted and type(getgenv().SimpleSpyShutdown) == "function" then
     getgenv().SimpleSpyShutdown()
@@ -220,8 +220,8 @@ function ErrorPrompt(Message,state)
     end
 end
 
-local Highlight = (isfile and loadfile and isfile("Highlight.lua") and loadfile("Highlight.lua")()) or loadstring(game:HttpGet("https://raw.githubusercontent.com/78n/SimpleSpy/main/Highlight.lua"))()
-local LazyFix = loadstring(game:HttpGet("https://raw.githubusercontent.com/78n/Roblox/refs/heads/main/Lua/Libraries/DataToCode/DataToCode.luau"))() -- Very lazy fix as I'm legit just pasting it from the rewrite
+local Highlight = (isfile and loadfile and isfile("Highlight.lua") and loadfile("Highlight.lua")()) or loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/refs/heads/main/SimpleSpyV3/highlight.lua"))()
+local LazyFix = loadstring(game:HttpGet("https://raw.githubusercontent.com/infyiff/backup/refs/heads/main/SimpleSpyV3/DataToCode.lua"))() -- Very lazy fix as I'm legit just pasting it from the rewrite
 
 local SimpleSpy3 = Create("ScreenGui",{ResetOnSpawn = false})
 local Storage = Create("Folder",{})
@@ -304,6 +304,10 @@ local connections = {}
 local DecompiledScripts = {}
 local generation = {}
 local running_threads = {}
+local isAutoRunning = false -- New variable for Run Code state
+local autoRunConnection = nil -- New variable for the Heartbeat connection
+local originalnamecall
+
 local originalnamecall
 
 local remoteEvent = Instance.new("RemoteEvent",Storage)
@@ -490,7 +494,7 @@ end
 --- Drags gui (so long as mouse is held down)
 --- @param input InputObject
 function onBarInput(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 then
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
         local lastPos = UserInputService:GetMouseLocation()
         local mainPos = Background.AbsolutePosition
         local offset = mainPos - lastPos
@@ -1924,7 +1928,7 @@ if not getgenv().SimpleSpyExecuted then
         end
         codebox = Highlight.new(CodeBox)
         logthread(spawn(function()
-            local suc,err = pcall(game.HttpGet,game,"https://raw.githubusercontent.com/78n/SimpleSpy/main/UpdateLog.lua")
+            local suc,err = pcall(game.HttpGet,game,"https://raw.githubusercontent.com/infyiff/backup/refs/heads/main/SimpleSpyV3/update.txt")
             codebox:setRaw((suc and err) or "")
         end))
         getgenv().SimpleSpy = SimpleSpy
@@ -1989,79 +1993,6 @@ function SimpleSpy:newButton(name, description, onClick)
 end
 
 ----- ADD ONS ----- (easily add or remove additonal functionality to the RemoteSpy!)
-	--- Spams the selected Remote
-newButton( "Spam Remote", function()
-    return "Click to spam the selected remote a number of times.\nIt will use the last logged arguments."
-end, function()
-    if not selected or not selected.Remote then
-        TextLabel.Text = "Error! No remote selected to spam."
-        return
-    end
-
-    local Remote = selected.Remote
-    local args = selected.args
-
-    -- Prompt the user for the number of executions
-    local numExecutions
-    xpcall(function()
-        -- Use a simple prompt since adding a new persistent textbox is complex
-        -- A robust solution would involve a dedicated input window, but this is simpler
-        local input = game:GetService("UserInputService"):GetTextAsync("Enter number of executions:", "100")
-        numExecutions = tonumber(input)
-    end, function(err)
-        -- In case GetTextAsync is not available or input is cancelled/error
-        warn("Error getting user input for spam count, defaulting to 100:", err)
-        numExecutions = 100
-    end)
-
-    if not numExecutions or numExecutions <= 0 then
-        TextLabel.Text = "Invalid number of executions. Please enter a positive number."
-        return
-    end
-
-    TextLabel.Text = ("Spamming '%s' %d times..."):format(Remote.Name, numExecutions)
-
-    -- Determine the correct function to call based on the remote type
-    local fireFunc
-    if Remote:IsA("RemoteEvent") or Remote:IsA("UnreliableRemoteEvent") then
-        fireFunc = Remote.FireServer
-    elseif Remote:IsA("RemoteFunction") then
-        fireFunc = Remote.InvokeServer
-    else
-        TextLabel.Text = "Error! Selected object is not a recognized RemoteEvent or RemoteFunction."
-        return
-    end
-
-    -- Perform the spamming
-    local successCount = 0
-    local failureCount = 0
-    for i = 1, numExecutions do
-        local success, result = xpcall(function()
-            if args and #args > 0 then
-                return fireFunc(Remote, unpack(args))
-            else
-                return fireFunc(Remote)
-            end
-        end, function(err)
-            -- Catch errors during the remote call itself
-            return false, err
-        end)
-
-        if success then
-            successCount = successCount + 1
-        else
-            failureCount = failureCount + 1
-            -- Optionally break or log the specific error here if needed
-        end
-    end
-
-    if failureCount == 0 then
-        TextLabel.Text = ("Spamming complete: %d successful calls to '%s'."):format(successCount, Remote.Name)
-    else
-        TextLabel.Text = ("Spamming complete with errors: %d successes, %d failures for '%s'."):format(successCount, failureCount, Remote.Name)
-    end
-end)
-
 --[[
     Some helpful things:
         - add your function in here, and create buttons for them through the 'newButton' function
@@ -2104,31 +2035,94 @@ newButton(
         end
     end
 )
+            
+         -- Function to handle the actual execution logic
+local function executeCode()
+    local Remote = selected and selected.Remote
+    if Remote then
+        TextLabel.Text = "Executing..."
+        xpcall(function()
+            local returnvalue
+            if Remote:IsA("RemoteEvent") or Remote:IsA("UnreliableRemoteEvent") then
+                returnvalue = Remote:FireServer(unpack(selected.args))
+            elseif Remote:IsA("RemoteFunction") then
+                returnvalue = Remote:InvokeServer(unpack(selected.args))
+            end
+            TextLabel.Text = ("Executed successfully!\n%s"):format(v2s(returnvalue))
+        end, function(err)
+            TextLabel.Text = ("Execution error!\n%s"):format(err)
+        end)
+        return
+    end
+    TextLabel.Text = "Source not found"
+end
+
+-- Function to update the button's appearance
+local function updateRunCodeButton(buttonFrame)
+    local ColorBar = buttonFrame:FindFirstChild("ColorBar")
+    if ColorBar then
+        if isAutoRunning then
+            -- Green for activated
+            ColorBar.BackgroundColor3 = Color3.fromRGB(68, 206, 91)
+        else
+            -- White/Default for disabled
+            ColorBar.BackgroundColor3 = Color3.new(1, 1, 1)
+        end
+    end
+end
 
 -- Executes the contents of the codebox through loadstring
-newButton("Run Code",
-    function() return "Click to execute code" end,
+newButton(
+    "Run Code",
     function()
-        local Remote = selected and selected.Remote
-        if Remote then
-            TextLabel.Text = "Executing..."
-            xpcall(function()
-                local returnvalue
-                if Remote:IsA("RemoteEvent") or Remote:IsA("UnreliableRemoteEvent") then
-                    returnvalue = Remote:FireServer(unpack(selected.args))
-                elseif Remote:IsA("RemoteFunction") then
-                    returnvalue = Remote:InvokeServer(unpack(selected.args))
-                end
+        return isAutoRunning and "Click to DISABLE auto-run (0.1s interval)" or "Click to EXECUTE once or DOUBLE-CLICK to ENABLE auto-run (0.1s interval)"
+    end,
+    function(buttonFrame)
+        logthread(running()) -- Re-add the thread logging which was in the newButton call
+        
+        if isAutoRunning then
+            -- Disable auto-run
+            if autoRunConnection then
+                autoRunConnection:Disconnect()
+                autoRunConnection = nil
+            end
+            isAutoRunning = false
+            TextLabel.Text = "Auto-run DISABLED"
+        else
+            -- Check for double-click to enable auto-run
+            local lastClickTime = buttonFrame.__LastClickTime or 0
+            buttonFrame.__LastClickTime = tick()
 
-                TextLabel.Text = ("Executed successfully!\n%s"):format(v2s(returnvalue))
-            end,function(err)
-                TextLabel.Text = ("Execution error!\n%s"):format(err)
-            end)
-            return
+            if (tick() - lastClickTime) < 0.3 then -- If the second click is within 0.3s
+                -- Enable auto-run
+                isAutoRunning = true
+                -- The original script has a 'taskscheduler' running on Heartbeat
+                -- We'll use a standard connection here to run every frame (approx 60 FPS or about 0.016s)
+                -- Running every 0.1 seconds requires a slightly different approach or a counter.
+                
+                -- To strictly enforce 0.1s, we will use a counter on Heartbeat
+                local counter = 0
+                autoRunConnection = RunService.Heartbeat:Connect(function(deltaTime)
+                    counter = counter + deltaTime
+                    if counter >= 0.1 then
+                        executeCode()
+                        counter = 0
+                    end
+                end)
+                TextLabel.Text = "Auto-run ACTIVATED (approx. 0.1s interval)"
+            else
+                -- Single click: Execute once
+                executeCode()
+            end
         end
-        TextLabel.Text = "Source not found"
+
+        updateRunCodeButton(buttonFrame)
     end
 )
+   
+            -- Executes the contents of the codebox through loadstring
+newButton("Run Code", function() return "Click to execute code" end, function() local Remote = selected and selected.Remote if Remote then TextLabel.Text = "Executing..." xpcall(function() local returnvalue if Remote:IsA("RemoteEvent") or Remote:IsA("UnreliableRemoteEvent") then returnvalue = Remote:FireServer(unpack(selected.args)) elseif Remote:IsA("RemoteFunction") then returnvalue = Remote:InvokeServer(unpack(selected.args)) end TextLabel.Text = ("Executed successfully!\n%s"):format(v2s(returnvalue)) end,function(err) TextLabel.Text = ("Execution error!\n%s"):format(err) end) return end TextLabel.Text = "Source not found" end )
+
 
 --- Gets the calling script (not super reliable but w/e)
 newButton(
@@ -2417,4 +2411,30 @@ if configs.supersecretdevtoggle then
         local NotSound = Create("Sound",{Parent = SuperSecretFolder,Looped = false,Volume = math.random(1,5),SoundId = getsynasset(random[math.random(1,#random)])})
         NotSound:Play()
     end)
-end         end
+end
+
+if table.find({
+    Enum.Platform.IOS, Enum.Platform.Android
+}, UserInputService:GetPlatform()) then
+    Background.Draggable = true
+    local QuickCapture = Instance.new("TextButton")
+    local UICorner = Instance.new("UICorner")
+    QuickCapture.Parent = SimpleSpy3
+    QuickCapture.BackgroundColor3 = Color3.fromRGB(37, 36, 38)
+    QuickCapture.BackgroundTransparency = 0.14
+    QuickCapture.Position = UDim2.new(0.529, 0, 0, 0)
+    QuickCapture.Size = UDim2.new(0, 32, 0, 33)
+    QuickCapture.Font = Enum.Font.SourceSansBold
+    QuickCapture.Text = "Spy"
+    QuickCapture.TextColor3 = Background.Visible and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(252, 51, 51)
+    QuickCapture.TextSize = 16
+    QuickCapture.TextWrapped = true
+    QuickCapture.ZIndex = 10
+    QuickCapture.Draggable = true
+    UICorner.CornerRadius = UDim.new(0.5, 0)
+    UICorner.Parent = QuickCapture
+    QuickCapture.MouseButton1Click:Connect(function()
+        Background.Visible = not Background.Visible
+        QuickCapture.TextColor3 = Background.Visible and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(252, 51, 51)
+    end)
+			end
