@@ -5,6 +5,7 @@ if getgenv().SimpleSpyExecuted and type(getgenv().SimpleSpyShutdown) == "functio
     getgenv().SimpleSpyShutdown()
 end
 
+
 local realconfigs = {
     logcheckcaller = false,
     autoblock = false,
