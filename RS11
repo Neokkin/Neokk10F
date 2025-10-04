@@ -24,7 +24,7 @@ end
 local oth = syn and syn.oth
 local unhook = oth and oth.unhook
 local hook = oth and oth.hook
-
+    
 local lower = string.lower
 local byte = string.byte
 local round = math.round
@@ -36,7 +36,7 @@ local create = coroutine.create
 local close = coroutine.close
 local OldDebugId = game.GetDebugId
 local info = debug.info
-
+    
 local IsA = game.IsA
 local tostring = tostring
 local tonumber = tonumber
@@ -967,7 +967,6 @@ function newButton(name, description, onClick)
     end)
     updateFunctionCanvas()
 end
-    
 
 --- Adds new Remote to logs
 --- @param name string The name of the remote being logged
@@ -2121,54 +2120,6 @@ newButton(
     end
 )
    
--- Executes the contents of the codebox through loadstring
-newButton(
-    "Run Code",
-    function()
-        return isAutoRunning and "Click to DISABLE auto-run (0.1s interval)" or "Click to EXECUTE once or DOUBLE-CLICK to ENABLE auto-run (0.1s interval)"
-    end,
-    function(buttonFrame)
-        logthread(running()) -- Re-add the thread logging which was in the newButton call
-        
-        if isAutoRunning then
-            -- Disable auto-run
-            if autoRunConnection then
-                autoRunConnection:Disconnect()
-                autoRunConnection = nil
-            end
-            isAutoRunning = false
-            TextLabel.Text = "Auto-run DISABLED"
-        else
-            -- Check for double-click to enable auto-run
-            local lastClickTime = buttonFrame.__LastClickTime or 0
-            buttonFrame.__LastClickTime = tick()
-
-            if (tick() - lastClickTime) < 0.3 then -- If the second click is within 0.3s
-                -- Enable auto-run
-                isAutoRunning = true
-                -- The original script has a 'taskscheduler' running on Heartbeat
-                -- We'll use a standard connection here to run every frame (approx 60 FPS or about 0.016s)
-                -- Running every 0.1 seconds requires a slightly different approach or a counter.
-                
-                -- To strictly enforce 0.1s, we will use a counter on Heartbeat
-                local counter = 0
-                autoRunConnection = RunService.Heartbeat:Connect(function(deltaTime)
-                    counter = counter + deltaTime
-                    if counter >= 0.1 then
-                        executeCode()
-                        counter = 0
-                    end
-                end)
-                TextLabel.Text = "Auto-run ACTIVATED (approx. 0.1s interval)"
-            else
-                -- Single click: Execute once
-                executeCode()
-            end
-        end
-
-        updateRunCodeButton(buttonFrame)
-    end
-)
 
 
 --- Gets the calling script (not super reliable but w/e)
