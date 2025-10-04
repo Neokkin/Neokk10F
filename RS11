@@ -306,6 +306,7 @@ local generation = {}
 local running_threads = {}
 local isAutoRunning = false -- New variable for Run Code state
 local autoRunConnection = nil -- New variable for the Heartbeat connection
+        local runButtonData = {}
 local originalnamecall
 
 local originalnamecall
@@ -2074,9 +2075,7 @@ end
 -- Executes the contents of the codebox through loadstring
 newButton(
     "Run Code",
-    function()
-        return isAutoRunning and "Click to DISABLE auto-run (0.1s interval)" or "Click to EXECUTE once or DOUBLE-CLICK to ENABLE auto-run (0.1s interval)"
-    end,
+    function() return isAutoRunning and "Click to DISABLE auto-run (0.1s interval)" or "Click to EXECUTE once or DOUBLE-CLICK to ENABLE auto-run (0.1s interval)" end,
     function(buttonFrame)
         logthread(running()) -- Re-add the thread logging which was in the newButton call
         
@@ -2090,8 +2089,9 @@ newButton(
             TextLabel.Text = "Auto-run DISABLED"
         else
             -- Check for double-click to enable auto-run
-            local lastClickTime = buttonFrame.__LastClickTime or 0
-            buttonFrame.__LastClickTime = tick()
+            runButtonData[buttonFrame] = runButtonData[buttonFrame] or { __LastClickTime = 0 } -- Corrected: Initializes data table if it doesn't exist
+            local lastClickTime = runButtonData[buttonFrame].__LastClickTime or 0              -- Corrected: Reads from the Lua table
+            runButtonData[buttonFrame].__LastClickTime = tick()                               -- Corrected: Writes to the Lua table
 
             if (tick() - lastClickTime) < 0.3 then -- If the second click is within 0.3s
                 -- Enable auto-run
@@ -2119,8 +2119,6 @@ newButton(
         updateRunCodeButton(buttonFrame)
     end
 )
-   
-
 
 --- Gets the calling script (not super reliable but w/e)
 newButton(
