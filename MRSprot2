@@ -2170,7 +2170,7 @@ local ParallelBox = Create("TextBox", {
 ParallelBox.FocusLost:Connect(function(enterPressed)
     if enterPressed then
         local num = tonumber(ParallelBox.Text)
-        if num and num >= 1 and num <= 50 then
+        if num and num >= 1 and num <= math.huge then
             parallelCount = math.floor(num)
             TextLabel.Text = ("Parallel executions set to %d"):format(parallelCount)
         else
