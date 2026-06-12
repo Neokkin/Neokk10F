@@ -1,0 +1,907 @@
+-- Roblox Studio Luau Mobile-Optimized Build Tools Script
+-- Engineered for absolute viewport containment, high priority rendering, and touch safety.
+-- Zero print statements. Optimized performance.
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- Clean up any previous active sessions
+local ExistingGui = PlayerGui:FindFirstChild("MobileBuildToolsGui")
+if ExistingGui then ExistingGui:Destroy() end
+
+-- ==========================================
+-- STATE ARCHITECTURE
+-- ==========================================
+local State = {
+	GuiVisible = false, -- Starts hidden; toggled via Master Button
+	Minimized = true,
+	CurrentMode = "Rotation", 
+	RDifference = 45,
+	PDifference = 5,
+	Count = 1,
+	
+	AirWalkActive = false,
+	MovingUp = false,
+	MovingDown = false,
+	AirWalkPlatform = nil,
+	AirWalkY = 0,
+	
+	MobilityMode = "Char", 
+	SelectedMaterials = {},
+	ShowPreview = false,
+	ShowGizmos = false,
+	
+	OffsetPosition = Vector3.new(0, 0, -15), 
+	OffsetRotation = Vector3.new(0, 0, 0),
+	
+	PreviewModels = {},
+	GizmoParts = {}
+}
+
+local BuildMaterials = {
+	"Stone Wall Window", "Table", "Throne", "Well", "Wood Battlements Wall",
+	"Wood Fence", "Wood Fence Gate", "Wood Floor", "Wood Foundation",
+	"Wood Half Wall", "Wood Low Wall", "Wood Roof", "Wood Sloped Roof",
+	"Wood Sloped Roof Corner", "Wood Stairs", "Wood Tower", "Wood Triangle Wall",
+	"Wood Wall", "Wood Wall Door", "Wood Wall Glass Window", "Wood Wall Open Window",
+	"Wood Wall Window", "Grill", "Ladder", "Lantern", "Placeable Torch",
+	"Stone Battlements Wall", "Stone Fence", "Stone Fence Gate", "Stone Floor",
+	"Stone Foundation", "Stone Half Wall", "Stone Low Wall", "Stone Roof",
+	"Stone Sloped Roof", "Stone Sloped Roof Corner", "Stone Stairs", "Stone Tower"
+}
+
+State.SelectedMaterials["Stone Wall Window"] = true
+
+-- ==========================================
+-- CORE UTILITY BUILDERS
+-- ==========================================
+local function Create(className, properties)
+	local instance = Instance.new(className)
+	for k, v in pairs(properties) do
+		instance[k] = v
+	end
+	return instance
+end
+
+local function FireBuildRemote(bName, cframe)
+	local placeBuild = ReplicatedStorage:FindFirstChild("PlaceBuild")
+	if placeBuild and placeBuild:IsA("RemoteFunction") then
+		task.spawn(function()
+			placeBuild:InvokeServer(bName, cframe)
+		end)
+	end
+end
+
+local function HookLongHold(button, action, stopAction)
+	local holding = false
+	button.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			holding = true
+			task.spawn(function()
+				action()
+				task.wait(0.4)
+				while holding do
+					action()
+					task.wait(0.02)
+				end
+			end)
+		end
+	end)
+	
+	local function endHold()
+		if holding then
+			holding = false
+			if stopAction then stopAction() end
+		end
+	end
+	button.InputEnded:Connect(endHold)
+	button.FocusLost:Connect(endHold)
+end
+
+-- ==========================================
+-- MAIN INTERFACE INITIALIZATION
+-- ==========================================
+local ScreenGui = Create("ScreenGui", {
+	Name = "MobileBuildToolsGui",
+	ResetOnSpawn = false,
+	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
+	DisplayOrder = 999999, -- Forces script UI above all core elements/executors
+	Enabled = true,
+	Parent = PlayerGui
+})
+
+-- Drag engine restricted explicitly to the Title Text only
+local function InitSafeDrag(trigger, frame)
+	local dragging, dragStart, startPos
+	trigger.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = frame.AbsolutePosition
+		end
+	end)
+	UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local delta = input.Position - dragStart
+			frame.Position = UDim2.new(0, startPos.X + delta.X, 0, startPos.Y + delta.Y)
+		end
+	end)
+	UserInputService.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = false
+		end
+	end)
+end
+
+local MainFrame = Create("Frame", {
+	Name = "MainFrame",
+	Size = UDim2.new(0, 200, 0, 255),
+	Position = UDim2.new(0.5, -100, 0.2, 0), -- Screen Centered Default
+	BackgroundColor3 = Color3.fromRGB(25, 25, 30),
+	BorderSizePixel = 0,
+	Visible = false,
+	Active = true,
+	Parent = ScreenGui
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = MainFrame })
+
+local TitleBar = Create("TextLabel", {
+	Name = "TitleBar",
+	Size = UDim2.new(1, -54, 0, 32),
+	Position = UDim2.new(0, 8, 0, 0),
+	BackgroundTransparency = 1,
+	Text = "* Build Menu *",
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 15,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Active = true,
+	Parent = MainFrame
+})
+InitSafeDrag(TitleBar, MainFrame)
+
+local MinBtn = Create("TextButton", {
+	Size = UDim2.new(0, 24, 0, 24),
+	Position = UDim2.new(1, -52, 0, 4),
+	BackgroundColor3 = Color3.fromRGB(45, 45, 50),
+	Text = "-",
+	TextColor3 = Color3.fromRGB(220, 220, 220),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 16,
+	Parent = MainFrame
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = MinBtn })
+
+local CloseBtn = Create("TextButton", {
+	Size = UDim2.new(0, 24, 0, 24),
+	Position = UDim2.new(1, -28, 0, 4),
+	BackgroundColor3 = Color3.fromRGB(160, 45, 45),
+	Text = "X",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 13,
+	Parent = MainFrame
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = CloseBtn })
+
+local ContentFrame = Create("Frame", {
+	Size = UDim2.new(1, 0, 1, -32),
+	Position = UDim2.new(0, 0, 0, 32),
+	BackgroundTransparency = 1,
+	Parent = MainFrame
+})
+Create("UIListLayout", {
+	SortOrder = Enum.SortOrder.LayoutOrder,
+	Padding = UDim.new(0, 6),
+	HorizontalAlignment = Enum.HorizontalAlignment.Center,
+	Parent = ContentFrame
+})
+
+local AirWalkToggle = Create("TextButton", {
+	Size = UDim2.new(0, 184, 0, 30),
+	BackgroundColor3 = Color3.fromRGB(50, 50, 55),
+	Text = "AirWalk: OFF",
+	TextColor3 = Color3.fromRGB(230, 230, 230),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 14,
+	Parent = ContentFrame
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 5), Parent = AirWalkToggle })
+
+local MobilityToggle = Create("TextButton", {
+	Size = UDim2.new(0, 184, 0, 30),
+	BackgroundColor3 = Color3.fromRGB(50, 50, 55),
+	Text = "Preview Mobility: Char",
+	TextColor3 = Color3.fromRGB(230, 230, 230),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 14,
+	Parent = ContentFrame
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 5), Parent = MobilityToggle })
+
+local MathInputContainer = Create("Frame", {
+	Size = UDim2.new(0, 184, 0, 44),
+	BackgroundTransparency = 1,
+	Parent = ContentFrame
+})
+local MathLabel = Create("TextLabel", {
+	Size = UDim2.new(1, 0, 0, 14),
+	Text = "Mathematical equation",
+	TextColor3 = Color3.fromRGB(160, 160, 160),
+	Font = Enum.Font.SourceSansItalic,
+	TextSize = 12,
+	BackgroundTransparency = 1,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = MathInputContainer
+})
+local MathInput = Create("TextBox", {
+	Size = UDim2.new(1, 0, 0, 28),
+	Position = UDim2.new(0, 0, 0, 16),
+	BackgroundColor3 = Color3.fromRGB(15, 15, 18),
+	Text = "",
+	PlaceholderText = "ex: y = (x^2)/10",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	Font = Enum.Font.Code,
+	TextSize = 13,
+	ClearTextOnFocus = false,
+	Parent = MathInputContainer
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = MathInput })
+
+local BuildMathBtn = Create("TextButton", {
+	Size = UDim2.new(0, 184, 0, 30),
+	BackgroundColor3 = Color3.fromRGB(40, 130, 80),
+	Text = "Build Equation",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 14,
+	Parent = ContentFrame
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 5), Parent = BuildMathBtn })
+
+local function SetMinimized(bool)
+	State.Minimized = bool
+	if State.Minimized then
+		ContentFrame.Visible = false
+		MainFrame.Size = UDim2.new(0, 200, 0, 32)
+		MinBtn.Text = "+"
+	else
+		ContentFrame.Visible = true
+		MainFrame.Size = UDim2.new(0, 200, 0, 255)
+		MinBtn.Text = "-"
+	end
+end
+MinBtn.MouseButton1Click:Connect(function() SetMinimized(not State.Minimized) end)
+CloseBtn.MouseButton1Click:Connect(function() ScreenGui:Destroy() end)
+
+-- ==========================================
+-- DOCK BUTTON CLUSTERS (CONTROL PANELS)
+-- ==========================================
+local ClusterAFrame = Create("Frame", {
+	Name = "ClusterA",
+	Size = UDim2.new(0, 310, 0, 50),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.new(0.5, 0, 0.65, 0), -- Positioned cleanly below center bounds
+	BackgroundTransparency = 1,
+	Visible = false,
+	Parent = ScreenGui
+})
+Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = ClusterAFrame })
+
+local ClusterBFrame = Create("Frame", {
+	Name = "ClusterB",
+	Size = UDim2.new(0, 310, 0, 50),
+	AnchorPoint = Vector2.new(0.5, 0.5),
+	Position = UDim2.new(0.5, 0, 0.78, 0), 
+	BackgroundTransparency = 1,
+	Visible = false,
+	Parent = ScreenGui
+})
+Create("UIListLayout", { FillDirection = Enum.FillDirection.Horizontal, Padding = UDim.new(0, 8), SortOrder = Enum.SortOrder.LayoutOrder, Parent = ClusterBFrame })
+
+-- ==========================================
+-- MIDDLE-LEFT MASTER SAFETY TOGGLE BUTTON
+-- ==========================================
+local MasterToolsToggle = Create("TextButton", {
+	Name = "MasterToolsToggle",
+	Size = UDim2.new(0, 110, 0, 38),
+	Position = UDim2.new(0, 15, 0.4, 0), -- Completely isolated side zone
+	BackgroundColor3 = Color3.fromRGB(210, 55, 55),
+	Text = "🛠️ BUILD TOOLS",
+	TextColor3 = Color3.fromRGB(255, 255, 255),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 12,
+	Active = true,
+	Parent = ScreenGui
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = MasterToolsToggle })
+
+MasterToolsToggle.MouseButton1Click:Connect(function()
+	State.GuiVisible = not State.GuiVisible
+	MainFrame.Visible = State.GuiVisible
+	ClusterAFrame.Visible = State.GuiVisible
+	ClusterBFrame.Visible = State.GuiVisible
+	
+	if State.GuiVisible then
+		-- Hard reset positions instantly to clear viewport deadzones
+		MainFrame.Position = UDim2.new(0.5, -100, 0.2, 0)
+		ClusterAFrame.Position = UDim2.new(0.5, 0, 0.65, 0)
+		ClusterBFrame.Position = UDim2.new(0.5, 0, 0.78, 0)
+		MasterToolsToggle.BackgroundColor3 = Color3.fromRGB(45, 140, 75)
+	else
+		MasterToolsToggle.BackgroundColor3 = Color3.fromRGB(210, 55, 55)
+	end
+end)
+
+-- ==========================================
+-- BULLETPROOF AIRWALK RUNTIME
+-- ==========================================
+local AirWalkControls = Create("Frame", {
+	Size = UDim2.new(0, 50, 0, 150),
+	Position = UDim2.new(0, 25, 0.5, -75),
+	BackgroundTransparency = 1,
+	Visible = false,
+	Parent = ScreenGui
+})
+Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 8), HorizontalAlignment = Enum.HorizontalAlignment.Center, Parent = AirWalkControls })
+
+local function CreateCircularTarget(parent, text, layoutOrder)
+	local b = Create("TextButton", {
+		Size = UDim2.new(0, 44, 0, 44),
+		BackgroundColor3 = Color3.fromRGB(35, 35, 40),
+		BackgroundTransparency = 0.15,
+		Text = text,
+		TextColor3 = Color3.fromRGB(245, 245, 245),
+		Font = Enum.Font.SourceSansBold,
+		TextSize = 13,
+		LayoutOrder = layoutOrder,
+		Active = true,
+		Parent = parent
+	})
+	Create("UICorner", { CornerRadius = UDim.new(0, 22), Parent = b })
+	return b
+end
+
+local AWUp = CreateCircularTarget(AirWalkControls, "▲", 1)
+local AWToggleInline = CreateCircularTarget(AirWalkControls, "☉", 2)
+local AWDown = CreateCircularTarget(AirWalkControls, "▼", 3)
+
+local AirWalkVerticalSpeed = 25 
+RunService.Heartbeat:Connect(function(dt)
+	if State.AirWalkActive then
+		local character = LocalPlayer.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		if root then
+			if not State.AirWalkPlatform or not State.AirWalkPlatform.Parent then
+				State.AirWalkPlatform = Create("Part", {
+					Name = "ActiveAirWalkAnchor",
+					Size = Vector3.new(150, 1, 150), 
+					Transparency = 0.75,
+					Color = Color3.fromRGB(0, 130, 255),
+					Material = Enum.Material.ForceField,
+					Anchored = true,
+					CanCollide = true,
+					Parent = workspace
+				})
+			end
+			
+			if State.MovingUp then 
+				State.AirWalkY = State.AirWalkY + (AirWalkVerticalSpeed * dt)
+				root.CFrame = root.CFrame + Vector3.new(0, AirWalkVerticalSpeed * dt, 0)
+			elseif State.MovingDown then 
+				State.AirWalkY = State.AirWalkY - (AirWalkVerticalSpeed * dt)
+				root.CFrame = root.CFrame - Vector3.new(0, AirWalkVerticalSpeed * dt, 0)
+			end
+			
+			State.AirWalkPlatform.Position = Vector3.new(root.Position.X, State.AirWalkY, root.Position.Z)
+		end
+	else
+		if State.AirWalkPlatform then
+			State.AirWalkPlatform:Destroy()
+			State.AirWalkPlatform = nil
+		end
+	end
+end)
+
+local function ToggleAirWalkLogic()
+	State.AirWalkActive = not State.AirWalkActive
+	if State.AirWalkActive then
+		local character = LocalPlayer.Character
+		local root = character and character:FindFirstChild("HumanoidRootPart")
+		State.AirWalkY = root and (root.Position.Y - 2.8) or 0
+		AirWalkToggle.Text = "AirWalk: ON"
+		AirWalkToggle.BackgroundColor3 = Color3.fromRGB(40, 120, 70)
+		AirWalkControls.Visible = true
+	else
+		AirWalkToggle.Text = "AirWalk: OFF"
+		AirWalkToggle.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+		AirWalkControls.Visible = false
+	end
+end
+
+AirWalkToggle.MouseButton1Click:Connect(ToggleAirWalkLogic)
+AWToggleInline.MouseButton1Click:Connect(ToggleAirWalkLogic)
+
+HookLongHold(AWUp, function() State.MovingUp = true end, function() State.MovingUp = false end)
+HookLongHold(AWDown, function() State.MovingDown = true end, function() State.MovingDown = false end)
+
+-- ==========================================
+-- VISUALIZATIONS & POSITION SYNCHRONIZER
+-- ==========================================
+local function GetTargetCenter()
+	local camera = workspace.CurrentCamera
+	local character = LocalPlayer.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	local baseCF = CFrame.new()
+	
+	if State.MobilityMode == "Cam" and camera then
+		baseCF = camera.CFrame
+	elseif root then
+		baseCF = root.CFrame
+	end
+	
+	local workingCF = baseCF * CFrame.new(State.OffsetPosition)
+	return workingCF * CFrame.Angles(math.rad(State.OffsetRotation.X), math.rad(State.OffsetRotation.Y), math.rad(State.OffsetRotation.Z))
+end
+
+local function CleanVisualProjections()
+	for _, m in pairs(State.PreviewModels) do m:Destroy() end
+	for _, g in pairs(State.GizmoParts) do g:Destroy() end
+	State.PreviewModels = {}
+	State.GizmoParts = {}
+end
+
+local function RenderVisualEngine()
+	CleanVisualProjections()
+	if not State.ShowPreview then return end
+	
+	local centerCF = GetTargetCenter()
+	local sourceStorage = ReplicatedStorage:FindFirstChild("Builds")
+	
+	for matName, active in pairs(State.SelectedMaterials) do
+		if active and sourceStorage then
+			local targetModel = sourceStorage:FindFirstChild(matName)
+			if targetModel and targetModel:IsA("Model") then
+				local clone = targetModel:Clone()
+				clone:SetPrimaryPartCFrame(centerCF)
+				for _, part in pairs(clone:GetDescendants()) do
+					if part:IsA("BasePart") then
+						part.Transparency = 0.5
+						part.CanCollide = false
+						part.Anchored = true
+					end
+				end
+				clone.Parent = workspace
+				table.insert(State.PreviewModels, clone)
+			end
+		end
+	end
+	
+	if State.ShowGizmos then
+		local directions = { Vector3.new(3, 0, 0), Vector3.new(0, 3, 0), Vector3.new(0, 0, 3) }
+		local colors = { Color3.fromRGB(255, 60, 60), Color3.fromRGB(60, 255, 60), Color3.fromRGB(60, 60, 255) }
+		
+		for i = 1, 3 do
+			local gizmo = Create("Part", {
+				Size = directions[i] + Vector3.new(0.15, 0.15, 0.15),
+				Color = colors[i],
+				Transparency = 0.4,
+				Anchored = true,
+				CanCollide = false,
+				CFrame = centerCF * CFrame.new(directions[i] / 2),
+				Parent = workspace
+			})
+			table.insert(State.GizmoParts, gizmo)
+		end
+	end
+end
+
+RunService.RenderStepped:Connect(function()
+	if State.ShowPreview then
+		local centerCF = GetTargetCenter()
+		for _, m in pairs(State.PreviewModels) do
+			if m and m.Parent and m.PrimaryPart then m:SetPrimaryPartCFrame(centerCF) end
+		end
+		
+		if State.ShowGizmos and #State.GizmoParts == 3 then
+			local directions = { Vector3.new(3, 0, 0), Vector3.new(0, 3, 0), Vector3.new(0, 0, 3) }
+			for i, part in ipairs(State.GizmoParts) do
+				if part and part.Parent then
+					part.CFrame = centerCF * CFrame.new(directions[i] / 2)
+				end
+			end
+		end
+	end
+end)
+
+-- ==========================================
+-- INTERACTION ASSEMBLY: CLUSTER A
+-- ==========================================
+local function CreateSplitCircleBtn(parent, layoutOrder, upLabel, downLabel, onUp, onDown)
+	local wrapper = Create("Frame", {
+		Size = UDim2.new(0, 44, 0, 44),
+		BackgroundTransparency = 1,
+		LayoutOrder = layoutOrder,
+		Active = false,
+		Parent = parent
+	})
+	
+	local upBtn = Create("TextButton", {
+		Size = UDim2.new(1, 0, 0.5, 0),
+		BackgroundColor3 = Color3.fromRGB(50, 50, 55),
+		BackgroundTransparency = 0.15,
+		Text = upLabel,
+		TextColor3 = Color3.fromRGB(240, 240, 240),
+		Font = Enum.Font.SourceSansBold,
+		TextSize = 10,
+		Active = true,
+		Parent = wrapper
+	})
+	Create("UICorner", { CornerRadius = UDim.new(0, 12), Parent = upBtn })
+	
+	local downBtn = Create("TextButton", {
+		Size = UDim2.new(1, 0, 0.5, 0),
+		Position = UDim2.new(0, 0, 0.5, 0),
+		BackgroundColor3 = Color3.fromRGB(230, 230, 235),
+		BackgroundTransparency = 0.15,
+		Text = downLabel,
+		TextColor3 = Color3.fromRGB(20, 20, 20),
+		Font = Enum.Font.SourceSansBold,
+		TextSize = 10,
+		Active = true,
+		Parent = wrapper
+	})
+	Create("UICorner", { CornerRadius = UDim.new(0, 12), Parent = downBtn })
+	
+	HookLongHold(upBtn, onUp)
+	HookLongHold(downBtn, onDown)
+	
+	return wrapper, upBtn, downBtn
+end
+
+local ModeBtn = CreateCircularTarget(ClusterAFrame, "Mode:\nRot", 1)
+
+local function ExecuteOffsetModifier(axis, direction)
+	if State.CurrentMode == "Rotation" then
+		local val = State.RDifference * direction
+		if axis == "X" then State.OffsetRotation = State.OffsetRotation + Vector3.new(val, 0, 0)
+		elseif axis == "Y" then State.OffsetRotation = State.OffsetRotation + Vector3.new(0, val, 0)
+		elseif axis == "Z" then State.OffsetRotation = State.OffsetRotation + Vector3.new(0, 0, val) end
+	else
+		local val = State.PDifference * direction
+		if axis == "X" then State.OffsetPosition = State.OffsetPosition + Vector3.new(val, 0, 0)
+		elseif axis == "Y" then State.OffsetPosition = State.OffsetPosition + Vector3.new(0, val, 0)
+		elseif axis == "Z" then State.OffsetPosition = State.OffsetPosition + Vector3.new(0, 0, val) end
+	end
+	if State.ShowPreview then RenderVisualEngine() end
+end
+
+local _, A2Up, A2Dn = CreateSplitCircleBtn(ClusterAFrame, 2, "Pitch+", "Pitch-", function() ExecuteOffsetModifier("X", 1) end, function() ExecuteOffsetModifier("X", -1) end)
+local _, A3Up, A3Dn = CreateSplitCircleBtn(ClusterAFrame, 3, "Yaw+", "Yaw-", function() ExecuteOffsetModifier("Y", 1) end, function() ExecuteOffsetModifier("Y", -1) end)
+local _, A4Up, A4Dn = CreateSplitCircleBtn(ClusterAFrame, 4, "Roll+", "Roll-", function() ExecuteOffsetModifier("Z", 1) end, function() ExecuteOffsetModifier("Z", -1) end)
+
+local InvertBtn = CreateCircularTarget(ClusterAFrame, "Invert", 5)
+local MatrixBtn = CreateCircularTarget(ClusterAFrame, "More", 6)
+
+local function UpdateClusterALabels()
+	if State.CurrentMode == "Rotation" then
+		ModeBtn.Text = "Mode:\nRot"
+		A2Up.Text = "Pitch+" A2Dn.Text = "Pitch-"
+		A3Up.Text = "Yaw+" A3Dn.Text = "Yaw-"
+		A4Up.Text = "Roll+" A4Dn.Text = "Roll-"
+	else
+		ModeBtn.Text = "Mode:\nPos"
+		A2Up.Text = "Up" A2Dn.Text = "Down"
+		A3Up.Text = "Right" A3Dn.Text = "Left"
+		A4Up.Text = "Fwd" A4Dn.Text = "Bwd"
+	end
+end
+
+ModeBtn.MouseButton1Click:Connect(function()
+	State.CurrentMode = (State.CurrentMode == "Rotation") and "Position" or "Rotation"
+	UpdateClusterALabels()
+end)
+
+InvertBtn.MouseButton1Click:Connect(function()
+	if State.CurrentMode == "Rotation" then
+		State.OffsetRotation = Vector3.new(-State.OffsetRotation.X, -State.OffsetRotation.Y, -State.OffsetRotation.Z)
+	else
+		State.OffsetPosition = Vector3.new(-State.OffsetPosition.X, -State.OffsetPosition.Y, -State.OffsetPosition.Z)
+	end
+	if State.ShowPreview then RenderVisualEngine() end
+end)
+
+local CentralMatrixPanel = Create("Frame", {
+	Size = UDim2.new(0, 284, 0, 160),
+	Position = UDim2.new(0.5, -142, 0.5, -80),
+	BackgroundColor3 = Color3.fromRGB(30, 30, 35),
+	Visible = false,
+	Active = true,
+	Parent = ScreenGui
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = CentralMatrixPanel })
+
+Create("UIGridLayout", {
+	CellSize = UDim2.new(0, 84, 0, 36),
+	CellPadding = UDim2.new(0, 8, 0, 8),
+	SortOrder = Enum.SortOrder.LayoutOrder,
+	Parent = CentralMatrixPanel
+})
+
+local function AddMatrixAction(text, order, action)
+	local b = Create("TextButton", {
+		BackgroundColor3 = Color3.fromRGB(48, 48, 54),
+		Text = text,
+		TextColor3 = Color3.fromRGB(240, 240, 240),
+		Font = Enum.Font.SourceSansBold,
+		TextSize = 11,
+		LayoutOrder = order,
+		Parent = CentralMatrixPanel
+	})
+	Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = b })
+	b.MouseButton1Click:Connect(action)
+end
+
+AddMatrixAction("Reset Rot X", 1, function() State.OffsetRotation = Vector3.new(0, State.OffsetRotation.Y, State.OffsetRotation.Z) RenderVisualEngine() end)
+AddMatrixAction("Reset Rot Y", 2, function() State.OffsetRotation = Vector3.new(State.OffsetRotation.X, 0, State.OffsetRotation.Z) RenderVisualEngine() end)
+AddMatrixAction("Reset Rot Z", 3, function() State.OffsetRotation = Vector3.new(State.OffsetRotation.X, State.OffsetRotation.Y, 0) RenderVisualEngine() end)
+AddMatrixAction("Reset All Rot", 4, function() State.OffsetRotation = Vector3.new(0, 0, 0) RenderVisualEngine() end)
+AddMatrixAction("Reset Pos X", 5, function() State.OffsetPosition = Vector3.new(0, State.OffsetPosition.Y, State.OffsetPosition.Z) RenderVisualEngine() end)
+AddMatrixAction("Reset Pos Y", 6, function() State.OffsetPosition = Vector3.new(State.OffsetPosition.X, 0, State.OffsetPosition.Z) RenderVisualEngine() end)
+AddMatrixAction("Reset Pos Z", 7, function() State.OffsetPosition = Vector3.new(State.OffsetPosition.X, State.OffsetPosition.Y, 0) RenderVisualEngine() end)
+AddMatrixAction("Reset All Pos", 8, function() State.OffsetPosition = Vector3.new(0, 0, -15) RenderVisualEngine() end)
+AddMatrixAction("Reset All", 9, function()
+	State.OffsetRotation = Vector3.new(0, 0, 0)
+	State.OffsetPosition = Vector3.new(0, 0, -15)
+	RenderVisualEngine()
+end)
+
+MatrixBtn.MouseButton1Click:Connect(function() CentralMatrixPanel.Visible = not CentralMatrixPanel.Visible end)
+
+-- ==========================================
+-- INTERACTION ASSEMBLY: CLUSTER B
+-- ==========================================
+local MatBtn = CreateCircularTarget(ClusterBFrame, "Material", 1)
+local PreviewBtn = CreateCircularTarget(ClusterBFrame, "Preview\nOFF", 2)
+local GizmoBtn = CreateCircularTarget(ClusterBFrame, "Gizmos\nOFF", 3)
+
+local function CreateInputDropdownCircle(parent, defaultText, layoutOrder, onSelection)
+	local container = Create("Frame", {
+		Size = UDim2.new(0, 44, 0, 44),
+		BackgroundTransparency = 1,
+		LayoutOrder = layoutOrder,
+		Parent = parent
+	})
+	
+	local textBox = Create("TextBox", {
+		Size = UDim2.new(1, 0, 1, 0),
+		BackgroundColor3 = Color3.fromRGB(35, 35, 40),
+		BackgroundTransparency = 0.15,
+		Text = defaultText,
+		TextColor3 = Color3.fromRGB(240, 240, 240),
+		Font = Enum.Font.SourceSansBold,
+		TextSize = 11,
+		ClearTextOnFocus = false,
+		Parent = container
+	})
+	Create("UICorner", { CornerRadius = UDim.new(0, 22), Parent = textBox })
+	
+	local dropFrame = Create("Frame", {
+		Size = UDim2.new(0, 50, 0, 120),
+		Position = UDim2.new(0, -3, 0, -125),
+		BackgroundColor3 = Color3.fromRGB(25, 25, 30),
+		Visible = false,
+		ZIndex = 5,
+		Parent = container
+	})
+	Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = dropFrame })
+	Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 2), Parent = dropFrame })
+	
+	textBox.Focused:Connect(function() dropFrame.Visible = true end)
+	textBox.FocusLost:Connect(function()
+		task.wait(0.2)
+		dropFrame.Visible = false
+		local val = tonumber(textBox.Text)
+		if val then onSelection(val) end
+	end)
+	
+	return textBox, dropFrame
+end
+
+local RBox, RDrop = CreateInputDropdownCircle(ClusterBFrame, "R: 45", 4, function(v) State.RDifference = v end)
+local PBox, PDrop = CreateInputDropdownCircle(ClusterBFrame, "P: 5", 5, function(v) State.PDifference = v end)
+local CBox, CDrop = CreateInputDropdownCircle(ClusterBFrame, "Cnt: 1", 6, function(v) State.Count = v end)
+
+local function PopulateDropdownOptions(frame, box, options, stateKey)
+	for i, opt in ipairs(options) do
+		local optBtn = Create("TextButton", {
+			Size = UDim2.new(1, 0, 0, 22),
+			BackgroundColor3 = Color3.fromRGB(40, 40, 45),
+			Text = tostring(opt),
+			TextColor3 = Color3.fromRGB(230, 230, 230),
+			Font = Enum.Font.SourceSans,
+			TextSize = 11,
+			ZIndex = 6,
+			LayoutOrder = i,
+			Parent = frame
+		})
+		optBtn.MouseButton1Click:Connect(function()
+			State[stateKey] = opt
+			box.Text = (stateKey == "Count") and ("Cnt: " .. opt) or (string.sub(stateKey, 1, 1) .. ": " .. opt)
+			frame.Visible = false
+			if State.ShowPreview then RenderVisualEngine() end
+		end)
+	end
+end
+PopulateDropdownOptions(RDrop, RBox, {45, 22.5, 90, 180}, "RDifference")
+PopulateDropdownOptions(PDrop, PBox, {1, 0.5, 5, 10, 20}, "PDifference")
+PopulateDropdownOptions(CDrop, CBox, {1, 3, 5, 10}, "Count")
+
+-- ==========================================
+-- CATEGORIZED MATERIAL GRAPH INTERFACE
+-- ==========================================
+local MaterialFrame = Create("Frame", {
+	Size = UDim2.new(0, 320, 0, 260),
+	Position = UDim2.new(0.5, -160, 0.5, -130),
+	BackgroundColor3 = Color3.fromRGB(25, 25, 28),
+	Visible = false,
+	Active = true,
+	Parent = ScreenGui
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = MaterialFrame })
+
+local MaterialTitle = Create("TextLabel", {
+	Size = UDim2.new(1, -60, 0, 35),
+	Position = UDim2.new(0, 12, 0, 0),
+	BackgroundTransparency = 1,
+	Text = "Select Build Materials",
+	TextColor3 = Color3.fromRGB(230, 230, 230),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 14,
+	TextXAlignment = Enum.TextXAlignment.Left,
+	Parent = MaterialFrame
+})
+
+local CloseMatBtn = Create("TextButton", {
+	Size = UDim2.new(0, 50, 0, 24),
+	Position = UDim2.new(1, -58, 0, 6),
+	BackgroundColor3 = Color3.fromRGB(55, 55, 60),
+	Text = "Done",
+	TextColor3 = Color3.fromRGB(240, 240, 240),
+	Font = Enum.Font.SourceSansBold,
+	TextSize = 12,
+	Parent = MaterialFrame
+})
+Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = CloseMatBtn })
+
+local MaterialScroll = Create("ScrollingFrame", {
+	Size = UDim2.new(1, -16, 1, -45),
+	Position = UDim2.new(0, 8, 0, 40),
+	BackgroundTransparency = 1,
+	CanvasSize = UDim2.new(0, 0, 0, 850),
+	ScrollBarThickness = 5,
+	Parent = MaterialFrame
+})
+Create("UIListLayout", { SortOrder = Enum.SortOrder.LayoutOrder, Padding = UDim.new(0, 6), Parent = MaterialScroll })
+
+local function SetupCategorizedGrid(categoryName, items, order)
+	Create("TextLabel", {
+		Size = UDim2.new(1, 0, 0, 20),
+		BackgroundTransparency = 1,
+		Text = "--- " .. categoryName .. " ---",
+		TextColor3 = Color3.fromRGB(150, 150, 160),
+		Font = Enum.Font.SourceSansBold,
+		TextSize = 12,
+		LayoutOrder = order * 2,
+		Parent = MaterialScroll
+	})
+	
+	local gridFrame = Create("Frame", {
+		Size = UDim2.new(1, 0, 0, math.ceil(#items / 2) * 32),
+		BackgroundTransparency = 1,
+		LayoutOrder = order * 2 + 1,
+		Parent = MaterialScroll
+	})
+	Create("UIGridLayout", {
+		CellSize = UDim2.new(0, 144, 0, 28),
+		CellPadding = UDim2.new(0, 8, 0, 4),
+		SortOrder = Enum.SortOrder.Name,
+		Parent = gridFrame
+	})
+	
+	for _, name in ipairs(items) do
+		local mBtn = Create("TextButton", {
+			BackgroundColor3 = State.SelectedMaterials[name] and Color3.fromRGB(35, 95, 160) or Color3.fromRGB(42, 42, 48),
+			Text = name,
+			TextColor3 = State.SelectedMaterials[name] and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(215, 215, 215),
+			Font = Enum.Font.SourceSans,
+			TextSize = 11,
+			Parent = gridFrame
+		})
+		Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = mBtn })
+		
+		mBtn.MouseButton1Click:Connect(function()
+			State.SelectedMaterials[name] = not State.SelectedMaterials[name]
+			mBtn.BackgroundColor3 = State.SelectedMaterials[name] and Color3.fromRGB(35, 95, 160) or Color3.fromRGB(42, 42, 48)
+			mBtn.TextColor3 = State.SelectedMaterials[name] and Color3.fromRGB(255, 255, 255) or Color3.fromRGB(215, 215, 215)
+			if State.ShowPreview then RenderVisualEngine() end
+		end)
+	end
+end
+
+local StoneItems, WoodItems, GeneralItems = {}, {}, {}
+for _, name in ipairs(BuildMaterials) do
+	if string.sub(name, 1, 5) == "Stone" then table.insert(StoneItems, name)
+	elseif string.sub(name, 1, 4) == "Wood" then table.insert(WoodItems, name)
+	else table.insert(GeneralItems, name) end
+end
+table.sort(StoneItems) table.sort(WoodItems) table.sort(GeneralItems)
+
+SetupCategorizedGrid("Stone Architecture", StoneItems, 1)
+SetupCategorizedGrid("Wood Architecture", WoodItems, 2)
+SetupCategorizedGrid("General Utilities", GeneralItems, 3)
+
+MatBtn.MouseButton1Click:Connect(function() MaterialFrame.Visible = not MaterialFrame.Visible end)
+CloseMatBtn.MouseButton1Click:Connect(function() MaterialFrame.Visible = false end)
+
+PreviewBtn.MouseButton1Click:Connect(function()
+	State.ShowPreview = not State.ShowPreview
+	PreviewBtn.Text = State.ShowPreview and "Preview\nON" or "Preview\nOFF"
+	PreviewBtn.BackgroundColor3 = State.ShowPreview and Color3.fromRGB(45, 110, 65) or Color3.fromRGB(35, 35, 40)
+	RenderVisualEngine()
+end)
+
+GizmoBtn.MouseButton1Click:Connect(function()
+	State.ShowGizmos = not State.ShowGizmos
+	GizmoBtn.Text = State.ShowGizmos and "Gizmos\nON" or "Gizmos\nOFF"
+	GizmoBtn.BackgroundColor3 = State.ShowGizmos and Color3.fromRGB(45, 110, 65) or Color3.fromRGB(35, 35, 40)
+	RenderVisualEngine()
+end)
+
+MobilityToggle.MouseButton1Click:Connect(function()
+	State.MobilityMode = (State.MobilityMode == "Char") and "Cam" or "Char"
+	MobilityToggle.Text = "Preview Mobility: " .. State.MobilityMode
+	if State.ShowPreview then RenderVisualEngine() end
+end)
+
+-- ==========================================
+-- MATH ENGINE SOLVER EXECUTION
+-- ==========================================
+BuildMathBtn.MouseButton1Click:Connect(function()
+	local input = MathInput.Text:gsub(" ", ""):gsub("y=", "")
+	if input == "" then return end
+	
+	for elementX = -15, 15, 3 do
+		local expression = input:gsub("x%^2", tostring(elementX * elementX)):gsub("x", tostring(elementX))
+		local divisionSplit = expression:split("/")
+		local computedY = 0
+		
+		if #divisionSplit == 2 then
+			local num = tonumber(divisionSplit[1]) or 0
+			local den = tonumber(divisionSplit[2]) or 1
+			computedY = num / den
+		else
+			computedY = tonumber(expression) or 0
+		end
+		
+		local resolvedCF = GetTargetCenter() * CFrame.new(elementX, computedY, 0)
+		for matName, active in pairs(State.SelectedMaterials) do
+			if active then
+				for countTier = 1, State.Count do
+					local sequenceCF = resolvedCF * CFrame.new(0, 0, -(countTier - 1) * 4)
+					FireBuildRemote(matName, sequenceCF)
+				end
+			end
+		end
+	end
+end)
+
+-- Initialize Boot Parameters
+UpdateClusterALabels()
+SetMinimized(true)
+
