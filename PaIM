@@ -1,315 +1,86 @@
--- Roblox Studio Luau Mobile-Optimized Build Tools Script
--- Designed for mobile device focus: large touch targets, scannable UI, compact layout.
--- Strictly layout, state management, and core execution. No print statements.
+-- Save this inside a LocalScript within StarterPlayerScripts or StarterGui
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
-local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
 
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+local Camera = workspace.CurrentCamera
 
--- Ensure old instances are thoroughly cleaned up
-local ExistingGui = PlayerGui:FindFirstChild("MobileBuildToolsGui")
-if ExistingGui then ExistingGui:Destroy() end
+-- Ensure Core Remote exists safely
+local PlaceBuildRemote = ReplicatedStorage:WaitForChild("PlaceBuild")
+local BuildsFolder = ReplicatedStorage:WaitForChild("Builds")
 
--- ==========================================
--- INSTANCE UTILITY
--- ==========================================
-local function Create(className, properties)
-	local instance = Instance.new(className)
-	for k, v in pairs(properties) do
-		instance[k] = v
-	end
-	return instance
-end
-
--- ==========================================
+--------------------------------------------------------------------------------
 -- STATE MANAGEMENT
--- ==========================================
+--------------------------------------------------------------------------------
 local State = {
-	GuiVisible = true,
-	Minimized = true,
-	CurrentMode = "Rotation", -- "Rotation" or "Position"
-	RDifference = 45,
-	PDifference = 5,
+	ToolsVisible = false,
+	Mode = "Rotation", -- "Rotation" or "Position"
+	SelectedMaterial = "Wood Wall",
+	Inverted = false,
+	
+	Rdifference = 45,
+	Pdifference = 5,
 	Count = 1,
+	
+	MobilityMode = "Cam", -- "Cam" or "Char"
+	BuildCenterOffset = Vector3.new(0, 0, -15), -- 15 studs away default
+	CurrentRotation = Vector3.new(0, 0, 0), -- Dynamic Euler angles stored in degrees
+	
+	PreviewActive = false,
+	GizmosActive = false,
 	AirWalkActive = false,
-	MobilityMode = "Char", -- "Cam" or "Char"
-	SelectedMaterials = {}, -- Multi-select dict
-	ShowPreview = false,
-	ShowGizmos = false,
-	
-	-- Vector/CFrame Modifiers
-	OffsetPosition = Vector3.new(0, 0, -15),
-	OffsetRotation = Vector3.new(0, 0, 0),
-	
-	-- Structural Framework
-	AirWalkPlatform = nil,
-	PreviewModels = {},
-	GizmoParts = {}
 }
 
--- Raw Data Lists
-local BuildMaterials = {
-	"Grill", "Ladder", "Lantern", "Placeable Torch", "Stone Battlements Wall",
-	"Stone Fence", "Stone Fence Gate", "Stone Floor", "Stone Foundation",
-	"Stone Half Wall", "Stone Low Wall", "Stone Roof", "Stone Sloped Roof",
-	"Stone Sloped Roof Corner", "Stone Stairs", "Stone Tower", "Stone Wall Window",
-	"Table", "Throne", "Well", "Wood Battlements Wall", "Wood Fence",
-	"Wood Fence Gate", "Wood Floor", "Wood Foundation", "Wood Half Wall",
-	"Wood Low Wall", "Wood Roof", "Wood Sloped Roof", "Wood Sloped Roof Corner",
-	"Wood Stairs", "Wood Tower", "Wood Triangle Wall", "Wood Wall",
-	"Wood Wall Door", "Wood Wall Glass Window", "Wood Wall Open Window", "Wood Wall Window"
-}
+local MultiSelectedMaterials = {}
+local HeldButtons = {}
+local ActivePreviewModel = nil
+local GizmoParts = {}
+local AirWalkPlatform = nil
 
--- Core Remote Wrapper
-local function FireBuildRemote(bName, cframe)
-	local placeBuild = ReplicatedStorage:FindFirstChild("PlaceBuild")
-	if placeBuild and placeBuild:IsA("RemoteFunction") then
-		task.spawn(function()
-			placeBuild:InvokeServer({bName, cframe})
-		end)
+--------------------------------------------------------------------------------
+-- MATHEMATICAL EQUATION PARSER (Safe Client Evaluation)
+--------------------------------------------------------------------------------
+local function evaluateMathExpression(equationStr, xValue)
+	local cleanExpr = equationStr:gsub("x", tostring(xValue))
+	cleanExpr = cleanExpr:gsub("sin", "math.sin")
+	cleanExpr = cleanExpr:gsub("cos", "math.cos")
+	cleanExpr = cleanExpr:gsub("tan", "math.tan")
+	cleanExpr = cleanExpr:gsub("pi", "math.pi")
+	cleanExpr = cleanExpr:gsub("%^", "**")
+	
+	local func, err = loadstring("return " .. cleanExpr)
+	if func then
+		local status, result = pcall(func)
+		if status then return result end
 	end
+	return 0
 end
 
--- ==========================================
--- GUI INTERFACE INITIALIZATION
--- ==========================================
-local ScreenGui = Create("ScreenGui", {
-	Name = "MobileBuildToolsGui",
-	ResetOnSpawn = false,
-	ZIndexBehavior = Enum.ZIndexBehavior.Sibling,
-	Parent = PlayerGui
-})
+--------------------------------------------------------------------------------
+-- SYSTEM HELPERS & CLEANUP
+--------------------------------------------------------------------------------
+local function getScreenBounds(guiObject)
+	local screen = guiObject.Parent
+	if screen:IsA("ScreenGui") then
+		return screen.AbsoluteSize
+	end
+	return Camera.ViewportSize
+end
 
--- Top-Right Main Controller Panel
-local MainFrame = Create("Frame", {
-	Name = "MainFrame",
-	Size = UDim2.new(0, 190, 0, 240),
-	Position = UDim2.new(1, -200, 0, 10),
-	BackgroundColor3 = Color3.fromRGB(30, 30, 35),
-	BorderSizePixel = 0,
-	Active = true,
-	Draggable = false, -- Will hand-code restricted drag boundary
-	Parent = ScreenGui
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = MainFrame })
-
-local TitleBar = Create("TextLabel", {
-	Name = "TitleBar",
-	Size = UDim2.new(1, -50, 0, 30),
-	Position = UDim2.new(0, 5, 0, 0),
-	BackgroundTransparency = 1,
-	Text = "* Build Menu *",
-	TextColor3 = Color3.fromRGB(240, 240, 240),
-	Font = Enum.Font.SourceSansBold,
-	TextSize = 16,
-	TextXAlignment = Enum.TextXAlignment.Left,
-	Active = true,
-	Parent = MainFrame
-})
-
-local MinBtn = Create("TextButton", {
-	Size = UDim2.new(0, 22, 0, 22),
-	Position = UDim2.new(1, -48, 0, 4),
-	BackgroundColor3 = Color3.fromRGB(50, 50, 55),
-	Text = "-",
-	TextColor3 = Color3.fromRGB(220, 220, 220),
-	Font = Enum.Font.SourceSansBold,
-	TextSize = 16,
-	Parent = MainFrame
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = MinBtn })
-
-local CloseBtn = Create("TextButton", {
-	Size = UDim2.new(0, 22, 0, 22),
-	Position = UDim2.new(1, -24, 0, 4),
-	BackgroundColor3 = Color3.fromRGB(150, 40, 40),
-	Text = "X",
-	TextColor3 = Color3.fromRGB(255, 255, 255),
-	Font = Enum.Font.SourceSansBold,
-	TextSize = 14,
-	Parent = MainFrame
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = CloseBtn })
-
--- Content Container Frame for Collapse Action
-local ContentFrame = Create("Frame", {
-	Name = "ContentFrame",
-	Size = UDim2.new(1, 0, 1, -30),
-	Position = UDim2.new(0, 0, 0, 30),
-	BackgroundTransparency = 1,
-	Parent = MainFrame
-})
-
--- Dynamic Layout Config for Buttons inside Content
-local UIListLayout = Create("UIListLayout", {
-	SortOrder = Enum.SortOrder.LayoutOrder,
-	Padding = UDim.new(0, 6),
-	HorizontalAlignment = Enum.HorizontalAlignment.Center,
-	Parent = ContentFrame
-})
-
-local ToggleToolsBtn = Create("TextButton", {
-	Size = UDim2.new(0, 175, 0, 32),
-	BackgroundColor3 = Color3.fromRGB(45, 100, 180),
-	Text = "Hide Build Tools",
-	TextColor3 = Color3.fromRGB(255, 255, 255),
-	Font = Enum.Font.SourceSansBold,
-	TextSize = 14,
-	Parent = ContentFrame
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = ToggleToolsBtn })
-
-local AirWalkToggle = Create("TextButton", {
-	Size = UDim2.new(0, 175, 0, 32),
-	BackgroundColor3 = Color3.fromRGB(55, 55, 60),
-	Text = "AirWalk: OFF",
-	TextColor3 = Color3.fromRGB(230, 230, 230),
-	Font = Enum.Font.SourceSansBold,
-	TextSize = 14,
-	Parent = ContentFrame
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = AirWalkToggle })
-
-local MobilityToggle = Create("TextButton", {
-	Size = UDim2.new(0, 175, 0, 32),
-	BackgroundColor3 = Color3.fromRGB(55, 55, 60),
-	Text = "Preview Mobility: Char",
-	TextColor3 = Color3.fromRGB(230, 230, 230),
-	Font = Enum.Font.SourceSansBold,
-	TextSize = 14,
-	Parent = ContentFrame
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = MobilityToggle })
-
-local MathInput = Create("TextBox", {
-	Size = UDim2.new(0, 175, 0, 36),
-	BackgroundColor3 = Color3.fromRGB(20, 20, 22),
-	Text = "",
-	PlaceholderText = "y = x^2 / 10",
-	TextColor3 = Color3.fromRGB(255, 255, 255),
-	PlaceholderColor3 = Color3.fromRGB(100, 100, 100),
-	Font = Enum.Font.Code,
-	TextSize = 13,
-	ClearTextOnFocus = false,
-	Parent = ContentFrame
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = MathInput })
-local MathLabel = Create("TextLabel", {
-	Size = UDim2.new(1, 0, 0, 12),
-	Position = UDim2.new(0, 0, 0, -12),
-	BackgroundTransparency = 1,
-	Text = "Mathematical Equation",
-	TextColor3 = Color3.fromRGB(160, 160, 160),
-	Font = Enum.Font.SourceSansItalic,
-	TextSize = 11,
-	Parent = MathInput
-})
-
-local BuildMathBtn = Create("TextButton", {
-	Size = UDim2.new(0, 175, 0, 32),
-	BackgroundColor3 = Color3.fromRGB(46, 139, 87),
-	Text = "Build Equation",
-	TextColor3 = Color3.fromRGB(255, 255, 255),
-	Font = Enum.Font.SourceSansBold,
-	TextSize = 14,
-	Parent = ContentFrame
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 6), Parent = BuildMathBtn })
-
--- ==========================================
--- RIGID CLUSTER SECTIONS (TOUCH SAFETY OPTIMIZED)
--- ==========================================
-local ClusterAFrame = Create("Frame", {
-	Name = "ClusterA",
-	Size = UDim2.new(0, 310, 0, 48),
-	Position = UDim2.new(0.5, -155, 1, -115),
-	BackgroundTransparency = 1,
-	Parent = ScreenGui
-})
-
-local ClusterBFrame = Create("Frame", {
-	Name = "ClusterB",
-	Size = UDim2.new(0, 310, 0, 48),
-	Position = UDim2.new(0.5, -155, 1, -170),
-	BackgroundTransparency = 1,
-	Parent = ScreenGui
-})
-
-local AirWalkControls = Create("Frame", {
-	Name = "AirWalkControls",
-	Size = UDim2.new(0, 45, 0, 140),
-	Position = UDim2.new(0, 20, 0.5, -70),
-	BackgroundTransparency = 1,
-	Visible = false,
-	Parent = ScreenGui
-})
-
--- Central Category UI (Cluster A - Button 6 execution target)
-local CenterCategoryFrame = Create("Frame", {
-	Name = "CenterCategoryFrame",
-	Size = UDim2.new(0, 280, 0, 160),
-	Position = UDim2.new(0.5, -140, 0.5, -80),
-	BackgroundColor3 = Color3.fromRGB(35, 35, 40),
-	Visible = false,
-	Active = true,
-	Parent = ScreenGui
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = CenterCategoryFrame })
-
--- Grid list for Materials Selection Frame
-local MaterialGridFrame = Create("Frame", {
-	Name = "MaterialGridFrame",
-	Size = UDim2.new(0, 320, 0, 240),
-	Position = UDim2.new(0.5, -160, 0.5, -120),
-	BackgroundColor3 = Color3.fromRGB(32, 32, 36),
-	Visible = false,
-	Active = true,
-	Parent = ScreenGui
-})
-Create("UICorner", { CornerRadius = UDim.new(0, 8), Parent = MaterialGridFrame })
-
-local MaterialScroll = Create("ScrollingFrame", {
-	Size = UDim2.new(1, -10, 1, -40),
-	Position = UDim2.new(0, 5, 0, 35),
-	BackgroundTransparency = 1,
-	CanvasSize = UDim2.new(0, 0, 0, 1100),
-	ScrollBarThickness = 6,
-	Parent = MaterialGridFrame
-})
-Create("UIGridLayout", {
-	CellSize = UDim2.new(0, 145, 0, 32),
-	CellPadding = UDim2.new(0, 5, 0, 5),
-	SortOrder = Enum.SortOrder.Name,
-	Parent = MaterialScroll
-})
-
-local CloseMatBtn = Create("TextButton", {
-	Size = UDim2.new(0, 60, 0, 24),
-	Position = UDim2.new(1, -65, 0, 5),
-	BackgroundColor3 = Color3.fromRGB(60, 60, 65),
-	Text = "Close",
-	TextColor3 = Color3.fromRGB(240, 240, 240),
-	Font = Enum.Font.SourceSansBold,
-	TextSize = 12,
-	Parent = MaterialGridFrame
-})
-
--- ==========================================
--- INTERACTIVE EXTENSIONS & DRAG ENGINE
--- ==========================================
-local function SetupDraggableEngine(targetTextLabel, boundFrame)
-	local dragging, dragInput, dragStart, startPos
+local function makeDraggable(frame, handle)
+	local dragging = false
+	local dragInput, dragStart, startPos
 	
-	targetTextLabel.InputBegan:Connect(function(input)
+	handle.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
 			dragging = true
 			dragStart = input.Position
-			startPos = boundFrame.Position
+			startPos = frame.Position
 			
 			input.Changed:Connect(function()
 				if input.UserInputState == Enum.UserInputState.End then
@@ -319,7 +90,7 @@ local function SetupDraggableEngine(targetTextLabel, boundFrame)
 		end
 	end)
 	
-	targetTextLabel.InputChanged:Connect(function(input)
+	handle.InputChanged:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 			dragInput = input
 		end
@@ -328,553 +99,808 @@ local function SetupDraggableEngine(targetTextLabel, boundFrame)
 	UserInputService.InputChanged:Connect(function(input)
 		if input == dragInput and dragging then
 			local delta = input.Position - dragStart
-			local targetX = startPos.X.Offset + delta.X
-			local targetY = startPos.Y.Offset + delta.Y
+			local targetPos = UDim2.new(
+				startPos.X.Scale, startPos.X.Offset + delta.X,
+				startPos.Y.Scale, startPos.Y.Offset + delta.Y
+			)
 			
-			-- Absolute screen boundaries injection
-			local currentScreen = ScreenGui.AbsoluteSize
-			local frameSize = boundFrame.AbsoluteSize
+			-- Frame clamping to screen size boundaries
+			local screenSize = getScreenBounds(frame)
+			local clampedX = math.clamp(targetPos.X.Offset, 0, screenSize.X - frame.AbsoluteSize.X)
+			local clampedY = math.clamp(targetPos.Y.Offset, 0, screenSize.Y - frame.AbsoluteSize.Y)
 			
-			local minX = 0
-			local maxX = currentScreen.X - frameSize.X
-			local minY = 0
-			local maxY = currentScreen.Y - frameSize.Y
-			
-			-- Account for Scale positional variants
-			local computedX = startPos.X.Scale * currentScreen.X + targetX
-			local computedY = startPos.Y.Scale * currentScreen.Y + targetY
-			
-			computedX = math.clamp(computedX, minX, maxX)
-			computedY = math.clamp(computedY, minY, maxY)
-			
-			boundFrame.Position = UDim2.new(0, computedX, 0, computedY)
+			frame.Position = UDim2.new(0, clampedX, 0, clampedY)
 		end
 	end)
 end
-SetupDraggableEngine(TitleBar, MainFrame)
 
--- Minimization Sequence Handling
-local function SetMinimizeState(minimize)
-	State.Minimized = minimize
-	if State.Minimized then
-		ContentFrame.Visible = false
-		MainFrame.Size = UDim2.new(0, 190, 0, 32)
-		MinBtn.Text = "+"
-	else
-		ContentFrame.Visible = true
-		MainFrame.Size = UDim2.new(0, 190, 0, 240)
-		MinBtn.Text = "-"
+local function setupLongHold(button, actionOnStep)
+	local isHolding = false
+	
+	button.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			isHolding = true
+			task.wait(0.4) -- Activation delay
+			while isHolding do
+				actionOnStep()
+				task.wait(0.1) -- Tick rate
+			end
+		end
+	end)
+	
+	local function endHold()
+		isHolding = false
 	end
-end
-MinBtn.MouseButton1Click:Connect(function()
-	SetMinimizeState(not State.Minimized)
-end)
-SetMinimizeState(true) -- Native execution initialized minimized
-
-CloseBtn.MouseButton1Click:Connect(function()
-	ScreenGui:Destroy()
-end)
-
-ToggleToolsBtn.MouseButton1Click:Connect(function()
-	State.GuiVisible = not State.GuiVisible
-	ClusterAFrame.Visible = State.GuiVisible
-	ClusterBFrame.Visible = State.GuiVisible
-	ToggleToolsBtn.Text = State.GuiVisible and "Hide Build Tools" or "Show Build Tools"
-end)
-
--- ==========================================
--- AIRWALK SIMULATION SYSTEM
--- ==========================================
-local function UpdateAirWalk()
-	if State.AirWalkActive then
-		if not State.AirWalkPlatform or not State.AirWalkPlatform.Parent then
-			State.AirWalkPlatform = Create("Part", {
-				Name = "AirWalkAnchor",
-				Size = Vector3.new(6, 0.5, 6),
-				Transparency = 1,
-				Anchored = true,
-				CanCollide = true,
-				Position = Vector3.new(0,0,0)
-			})
-		end
-		local character = LocalPlayer.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if root then
-			State.AirWalkPlatform.Position = root.Position + Vector3.new(0, -2.75, 0)
-			State.AirWalkPlatform.Parent = workspace
-		end
-		AirWalkToggle.Text = "AirWalk: ON"
-		AirWalkControls.Visible = true
-	else
-		if State.AirWalkPlatform then
-			State.AirWalkPlatform:Destroy()
-			State.AirWalkPlatform = nil
-		end
-		AirWalkToggle.Text = "AirWalk: OFF"
-		AirWalkControls.Visible = false
-	end
+	button.InputEnded:Connect(endHold)
+	button.MouseLeave:Connect(endHold)
 end
 
-AirWalkToggle.MouseButton1Click:Connect(function()
-	State.AirWalkActive = not State.AirWalkActive
-	UpdateAirWalk()
-end)
+--------------------------------------------------------------------------------
+-- UI DESIGN CONSTRUCTOR & LAYOUT
+--------------------------------------------------------------------------------
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "MobileAdvancedBuildSystem"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = PlayerGui
 
--- Vertical Airwalk Stack Layout
-local AWList = Create("UIListLayout", {
-	SortOrder = Enum.SortOrder.LayoutOrder,
-	Padding = UDim.new(0, 6),
-	HorizontalAlignment = Enum.HorizontalAlignment.Center,
-	Parent = AirWalkControls
-})
+-- Main Controller Window Configuration
+local MainWindow = Instance.new("Frame")
+MainWindow.Name = "MainWindow"
+MainWindow.Size = UDim2.fromOffset(210, 240)
+MainWindow.Position = UDim2.new(1, -220, 0, 10) -- Top Right Start Position
+MainWindow.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MainWindow.BorderSizePixel = 0
+MainWindow.ClipsDescendants = false
+MainWindow.Parent = ScreenGui
 
-local function CreateAWButton(text, layoutOrder)
-	local btn = Create("TextButton", {
-		Size = UDim2.new(0, 36, 0, 36),
-		BackgroundColor3 = Color3.fromRGB(45, 45, 50),
-		Text = text,
-		TextColor3 = Color3.fromRGB(240, 240, 240),
-		Font = Enum.Font.SourceSansBold,
-		TextSize = 14,
-		LayoutOrder = layoutOrder,
-		Parent = AirWalkControls
-	})
-	Create("UICorner", { CornerRadius = UDim.new(0, 18), Parent = btn })
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 8)
+MainCorner.Parent = MainWindow
+
+local HeaderHandle = Instance.new("TextLabel")
+HeaderHandle.Name = "HeaderHandle"
+HeaderHandle.Size = UDim2.new(1, 0, 0, 30)
+HeaderHandle.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+HeaderHandle.Text = " BUILD OS CONTROLLER "
+HeaderHandle.TextColor3 = Color3.fromRGB(240, 240, 240)
+HeaderHandle.Font = Enum.Font.SourceSansBold
+HeaderHandle.TextSize = 14
+HeaderHandle.Active = true
+HeaderHandle.Parent = MainWindow
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 8)
+HeaderCorner.Parent = HeaderHandle
+
+makeDraggable(MainWindow, HeaderHandle)
+
+-- Control Buttons Base Design
+local function createButton(name, text, pos, size, parent, bgColor, textColor)
+	local btn = Instance.new("TextButton")
+	btn.Name = name
+	btn.Size = size
+	btn.Position = pos
+	btn.BackgroundColor3 = bgColor or Color3.fromRGB(50, 50, 55)
+	btn.Text = text
+	btn.TextColor3 = textColor or Color3.fromRGB(255, 255, 255)
+	btn.Font = Enum.Font.SourceSansBold
+	btn.TextSize = 13
+	btn.BorderSizePixel = 0
+	btn.Parent = parent
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 6)
+	corner.Parent = btn
 	return btn
 end
 
-local AWUp = CreateAWButton("▲", 1)
-local AWToggleInline = CreateAWButton("☉", 2)
-local AWDown = CreateAWButton("▼", 3)
+-- Close and Minimize Control Framework
+local CloseBtn = createButton("CloseBtn", "X", UDim2.new(1, -25, 0, 5), UDim2.fromOffset(20, 20), HeaderHandle, Color3.fromRGB(180, 50, 50))
+local MinimizeBtn = createButton("MinimizeBtn", "-", UDim2.new(1, -50, 0, 5), UDim2.fromOffset(20, 20), HeaderHandle, Color3.fromRGB(70, 70, 75))
 
-AWToggleInline.MouseButton1Click:Connect(function()
-	State.AirWalkActive = not State.AirWalkActive
-	UpdateAirWalk()
-end)
+local ScrollContainer = Instance.new("ScrollingFrame")
+ScrollContainer.Size = UDim2.new(1, -10, 1, -40)
+ScrollContainer.Position = UDim2.fromOffset(5, 35)
+ScrollContainer.BackgroundTransparency = 1
+ScrollContainer.BorderSizePixel = 0
+ScrollContainer.CanvasSize = UDim2.fromOffset(0, 260)
+ScrollContainer.ScrollBarThickness = 2
+ScrollContainer.Parent = MainWindow
 
-local function MoveAirWalk(studs)
-	if State.AirWalkPlatform and State.AirWalkActive then
-		local character = LocalPlayer.Character
-		local root = character and character:FindFirstChild("HumanoidRootPart")
-		if root then
-			local targetPos = State.AirWalkPlatform.Position + Vector3.new(0, studs, 0)
-			State.AirWalkPlatform.Position = targetPos
-			root.CFrame = CFrame.new(targetPos + Vector3.new(0, 2.75, 0)) * root.CFrame.Rotation
-		end
-	end
+local MasterToggle = createButton("MasterToggle", "Show Build Tools On/Off", UDim2.fromOffset(5, 5), UDim2.fromOffset(190, 35), ScrollContainer, Color3.fromRGB(46, 117, 89))
+local AirWalkToggle = createButton("AirWalkToggle", "AirWalk: OFF", UDim2.fromOffset(5, 45), UDim2.fromOffset(190, 35), ScrollContainer, Color3.fromRGB(75, 75, 80))
+local MobilityToggle = createButton("MobilityToggle", "Preview Mobility: Cam", UDim2.fromOffset(5, 85), UDim2.fromOffset(190, 35), ScrollContainer, Color3.fromRGB(75, 75, 80))
+
+local EquationInput = Instance.new("TextBox")
+EquationInput.Size = UDim2.fromOffset(190, 40)
+EquationInput.Position = UDim2.fromOffset(5, 130)
+EquationInput.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+EquationInput.PlaceholderText = "Enter Math Equation (ex: x^2)"
+EquationInput.Text = ""
+EquationInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+EquationInput.Font = Enum.Font.Code
+EquationInput.TextSize = 12
+EquationInput.ClearTextOnFocus = false
+EquationInput.Parent = ScrollContainer
+
+local EquationLabel = Instance.new("TextLabel")
+EquationLabel.Size = UDim2.fromOffset(190, 15)
+EquationLabel.Position = UDim2.fromOffset(5, 175)
+EquationLabel.BackgroundTransparency = 1
+EquationLabel.Text = "Mathematical Equation Engine"
+EquationLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+EquationLabel.Font = Enum.Font.SourceSansItalic
+EquationLabel.TextSize = 11
+EquationLabel.Parent = ScrollContainer
+
+local BuildEquationBtn = createButton("BuildEquationBtn", "Build Equation", UDim2.fromOffset(5, 195), UDim2.fromOffset(190, 35), ScrollContainer, Color3.fromRGB(35, 90, 150))
+
+--------------------------------------------------------------------------------
+-- CLUSTER HUD PANELS (Mobile Specific Positioning Layout)
+--------------------------------------------------------------------------------
+local ClusterAFrame = Instance.new("Frame")
+ClusterAFrame.Name = "ClusterA"
+ClusterAFrame.Size = UDim2.fromOffset(310, 50)
+ClusterAFrame.Position = UDim2.new(0.5, -155, 1, -135) -- Centered structural layout above tools
+ClusterAFrame.BackgroundTransparency = 1
+ClusterAFrame.Visible = false
+ClusterAFrame.Parent = ScreenGui
+
+local ClusterBFrame = Instance.new("Frame")
+ClusterBFrame.Name = "ClusterB"
+ClusterBFrame.Size = UDim2.fromOffset(310, 50)
+ClusterBFrame.Position = UDim2.new(0.5, -155, 1, -195) -- Layered stack layout directly above Cluster A
+ClusterBFrame.BackgroundTransparency = 1
+ClusterBFrame.Visible = false
+ClusterBFrame.Parent = ScreenGui
+
+local function createCircularBase(name, index, parent)
+	local base = Instance.new("Frame")
+	base.Name = name .. index
+	base.Size = UDim2.fromOffset(45, 45)
+	base.Position = UDim2.fromOffset((index - 1) * 52, 0)
+	base.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+	base.BackgroundTransparency = 0.3
+	base.Parent = parent
+	
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(1, 0)
+	corner.Parent = base
+	return base
 end
 
--- Long Hold Execution Helper Object Block
-local function HookLongHold(button, action)
-	local holding = false
-	button.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-			holding = true
-			task.spawn(function()
-				action()
-				task.wait(0.4)
-				while holding do
-					action()
-					task.wait(0.08)
-				end
-			end)
+-- Cluster A Construction (Transformation Elements)
+local ClusterA_B1 = createCircularBase("ClusterA_B", 1, ClusterAFrame)
+local ModeBtn = createButton("ModeBtn", "ROT", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), ClusterA_B1, Color3.fromRGB(55, 75, 110))
+ModeBtn.Size = UDim2.new(1, 0, 1, 0)
+
+local splitButtons = {}
+for i = 2, 4 do
+	local base = createCircularBase("ClusterA_B", i, ClusterAFrame)
+	base.ClipsDescendants = true
+	
+	local upHalf = Instance.new("TextButton")
+	upHalf.Size = UDim2.new(1, 0, 0.5, 0)
+	upHalf.Position = UDim2.fromOffset(0, 0)
+	upHalf.BackgroundColor3 = Color3.fromRGB(60, 100, 60)
+	upHalf.BackgroundTransparency = 0.2
+	upHalf.Text = "+"
+	upHalf.TextColor3 = Color3.fromRGB(255, 255, 255)
+	upHalf.Font = Enum.Font.SourceSansBold
+	upHalf.TextSize = 14
+	upHalf.BorderSizePixel = 0
+	upHalf.Parent = base
+	
+	local downHalf = Instance.new("TextButton")
+	downHalf.Size = UDim2.new(1, 0, 0.5, 0)
+	downHalf.Position = UDim2.new(0, 0, 0.5, 0)
+	downHalf.BackgroundColor3 = Color3.fromRGB(195, 155, 195) -- Inverted contrasting color spectrum
+	downHalf.BackgroundTransparency = 0.2
+	downHalf.Text = "-"
+	downHalf.TextColor3 = Color3.fromRGB(30, 30, 30)
+	downHalf.Font = Enum.Font.SourceSansBold
+	downHalf.TextSize = 14
+	downHalf.BorderSizePixel = 0
+	downHalf.Parent = base
+	
+	splitButtons[i] = {Up = upHalf, Down = downHalf, Base = base}
+end
+
+local ClusterA_B5 = createCircularBase("ClusterA_B", 5, ClusterAFrame)
+local InvertBtn = createButton("InvertBtn", "INV", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), ClusterA_B5, Color3.fromRGB(80, 50, 50))
+
+local ClusterA_B6 = createCircularBase("ClusterA_B", 6, ClusterAFrame)
+local ResetsMenuBtn = createButton("ResetsMenuBtn", "RST", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), ClusterA_B6, Color3.fromRGB(90, 90, 95))
+
+-- Cluster B Construction (Utilities / Configuration Interfaces)
+local ClusterB_B1 = createCircularBase("ClusterB_B", 1, ClusterBFrame)
+local MatMenuBtn = createButton("MatMenuBtn", "MAT", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), ClusterB_B1, Color3.fromRGB(110, 85, 45))
+
+local ClusterB_B2 = createCircularBase("ClusterB_B", 2, ClusterBFrame)
+local PreviewToggleBtn = createButton("PreviewToggleBtn", "PRV", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), ClusterB_B2, Color3.fromRGB(70, 70, 75))
+
+local ClusterB_B3 = createCircularBase("ClusterB_B", 3, ClusterBFrame)
+local GizmosToggleBtn = createButton("GizmosToggleBtn", "GIZ", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), ClusterB_B3, Color3.fromRGB(70, 70, 75))
+
+local function makeDropdownInput(index, defaultValue, listOptions, parent, stateKey)
+	local base = createCircularBase("ClusterB_B", index, parent)
+	
+	local box = Instance.new("TextBox")
+	box.Size = UDim2.new(1, 0, 1, 0)
+	box.BackgroundTransparency = 1
+	box.Text = tostring(defaultValue)
+	box.TextColor3 = Color3.fromRGB(255, 255, 255)
+	box.Font = Enum.Font.SourceSansBold
+	box.TextSize = 12
+	box.TextAlignment = Enum.TextAlignment.Center
+	box.Parent = base
+	
+	local menuFrame = Instance.new("Frame")
+	menuFrame.Size = UDim2.fromOffset(50, #listOptions * 22)
+	menuFrame.Position = UDim2.new(0, -2, 0, -#listOptions * 22 - 4)
+	menuFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+	menuFrame.Visible = false
+	menuFrame.ZIndex = 10
+	menuFrame.Parent = base
+	
+	local listCorner = Instance.new("UICorner")
+	listCorner.CornerRadius = UDim.new(0, 4)
+	listCorner.Parent = menuFrame
+	
+	for oIdx, val in ipairs(listOptions) do
+		local opt = createButton("Opt_" .. val, tostring(val), UDim2.fromOffset(2, (oIdx - 1) * 22 + 2), UDim2.fromOffset(46, 18), menuFrame, Color3.fromRGB(50, 50, 55))
+		opt.TextSize = 11
+		opt.ZIndex = 11
+		opt.MouseButton1Click:Connect(function()
+			box.Text = tostring(val)
+			State[stateKey] = tonumber(val) or val
+			menuFrame.Visible = false
+		end)
+	end
+	
+	base.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton2 or input.UserInputType == Enum.UserInputType.TouchLongPress then
+			menuFrame.Visible = not menuFrame.Visible
 		end
 	end)
-	local function stopHold() holding = false end
-	button.InputEnded:Connect(stopHold)
-	button.FocusLost:Connect(stopHold)
+	
+	box.FocusLost:Connect(function()
+		local num = tonumber(box.Text)
+		if num then
+			State[stateKey] = num
+		else
+			box.Text = tostring(State[stateKey])
+		end
+	end)
+	
+	return box
 end
 
-HookLongHold(AWUp, function() MoveAirWalk(0.5) end)
-HookLongHold(AWDown, function() MoveAirWalk(-0.5) end)
+local RDiffBox = makeDropdownInput(4, 45, {45, 22.5, 90, 180}, ClusterBFrame, "Rdifference")
+local PDiffBox = makeDropdownInput(5, 5, {1, 0.5, 5, 10, 20}, ClusterBFrame, "Pdifference")
 
-MobilityToggle.MouseButton1Click:Connect(function()
-	if State.MobilityMode == "Char" then
-		State.MobilityMode = "Cam"
+-- Dynamic Element 6 Configuration for Cluster B: Count Text Interface
+local ClusterB_B6 = createCircularBase("ClusterB_B", 6, ClusterBFrame)
+local CountBox = Instance.new("TextBox")
+CountBox.Size = UDim2.new(1, 0, 1, 0)
+CountBox.BackgroundTransparency = 1
+CountBox.Text = "1"
+CountBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+CountBox.Font = Enum.Font.SourceSansBold
+CountBox.TextSize = 12
+CountBox.TextAlignment = Enum.TextAlignment.Center
+CountBox.Parent = ClusterB_B6
+
+CountBox.FocusLost:Connect(function()
+	local val = tonumber(CountBox.Text)
+	if val and val > 0 then
+		State.Count = math.floor(val)
 	else
-		State.MobilityMode = "Char"
+		CountBox.Text = tostring(State.Count)
 	end
-	MobilityToggle.Text = "Preview Mobility: " .. State.MobilityMode
 end)
 
--- ==========================================
--- WORLD PREVIEW & GIZMO PIPELINES
--- ==========================================
-local function ClearLocalVisuals()
-	for _, m in pairs(State.PreviewModels) do m:Destroy() end
-	for _, g in pairs(State.GizmoParts) do g:Destroy() end
-	State.PreviewModels = {}
-	State.GizmoParts = {}
-end
+--------------------------------------------------------------------------------
+-- SUB-MENUS CREATION (Material Grid & Central Resets)
+--------------------------------------------------------------------------------
+-- Centered Resets Window Configuration
+local ResetsWindow = Instance.new("Frame")
+ResetsWindow.Name = "ResetsWindow"
+ResetsWindow.Size = UDim2.fromOffset(260, 160)
+ResetsWindow.Position = UDim2.new(0.5, -130, 0.5, -80)
+ResetsWindow.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+ResetsWindow.Visible = false
+ResetsWindow.Parent = ScreenGui
 
-local function GetTargetCenter()
-	local camera = workspace.CurrentCamera
-	local character = LocalPlayer.Character
-	local root = character and character:FindFirstChild("HumanoidRootPart")
-	
-	local baseCF = CFrame.new()
-	if State.MobilityMode == "Cam" and camera then
-		baseCF = camera.CFrame
-	elseif root then
-		baseCF = root.CFrame
+local ResetCorner = Instance.new("UICorner")
+ResetCorner.Parent = ResetsWindow
+
+local RotLabel = Instance.new("TextLabel")
+RotLabel.Size = UDim2.fromOffset(120, 20)
+RotLabel.Position = UDim2.fromOffset(5, 5)
+RotLabel.Text = "Rotation Resets"
+RotLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+RotLabel.Font = Enum.Font.SourceSansBold
+RotLabel.BackgroundTransparency = 1
+RotLabel.Parent = ResetsWindow
+
+local RX = createButton("RX", "Reset X", UDim2.fromOffset(5, 30), UDim2.fromOffset(55, 25), ResetsWindow)
+local RY = createButton("RY", "Reset Y", UDim2.fromOffset(65, 30), UDim2.fromOffset(55, 25), ResetsWindow)
+local RZ = createButton("RZ", "Reset Z", UDim2.fromOffset(5, 60), UDim2.fromOffset(55, 25), ResetsWindow)
+local RAll = createButton("RAll", "All Rot", UDim2.fromOffset(65, 60), UDim2.fromOffset(55, 25), ResetsWindow, Color3.fromRGB(110, 60, 60))
+
+local PosLabel = Instance.new("TextLabel")
+PosLabel.Size = UDim2.fromOffset(120, 20)
+PosLabel.Position = UDim2.fromOffset(135, 5)
+PosLabel.Text = "Position Resets"
+PosLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+PosLabel.Font = Enum.Font.SourceSansBold
+PosLabel.BackgroundTransparency = 1
+PosLabel.Parent = ResetsWindow
+
+local PX = createButton("PX", "Reset X", UDim2.fromOffset(135, 30), UDim2.fromOffset(55, 25), ResetsWindow)
+local PY = createButton("PY", "Reset Y", UDim2.fromOffset(195, 30), UDim2.fromOffset(55, 25), ResetsWindow)
+local PZ = createButton("PZ", "Reset Z", UDim2.fromOffset(135, 60), UDim2.fromOffset(55, 25), ResetsWindow)
+local PAll = createButton("PAll", "All Pos", UDim2.fromOffset(195, 60), UDim2.fromOffset(55, 25), ResetsWindow, Color3.fromRGB(110, 60, 60))
+
+local GlobalResetBtn = createButton("GlobalResetBtn", "Reset All", UDim2.fromOffset(135, 95), UDim2.fromOffset(115, 30), ResetsWindow, Color3.fromRGB(150, 40, 40))
+
+-- Structural Material Asset Collection
+local MaterialsManifest = {
+	Wood = {
+		"Wood Battlements Wall", "Wood Fence", "Wood Fence Gate", "Wood Floor", "Wood Foundation",
+		"Wood Half Wall", "Wood Low Wall", "Wood Roof", "Wood Sloped Roof", "Wood Sloped Roof Corner",
+		"Wood Stairs", "Wood Tower", "Wood Triangle Wall", "Wood Wall", "Wood Wall Door",
+		"Wood Wall Glass Window", "Wood Wall Open Window", "Wood Wall Window"
+	},
+	Stone = {
+		"Stone Battlements Wall", "Stone Fence", "Stone Fence Gate", "Stone Floor", "Stone Foundation",
+		"Stone Half Wall", "Stone Low Wall", "Stone Roof", "Stone Sloped Roof", "Stone Sloped Roof Corner",
+		"Stone Stairs", "Stone Tower", "Stone Wall Window"
+	},
+	Props = {
+		"Table", "Throne", "Well", "Grill", "Ladder", "Lantern", "Placeable Torch"
+	}
+}
+
+local MaterialMenu = Instance.new("Frame")
+MaterialMenu.Name = "MaterialGridMenu"
+MaterialMenu.Size = UDim2.fromOffset(280, 220)
+MaterialMenu.Position = UDim2.new(0.5, -140, 0.5, -110)
+MaterialMenu.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+MaterialMenu.Visible = false
+MaterialMenu.Parent = ScreenGui
+
+local MatCorner = Instance.new("UICorner")
+MatCorner.Parent = MaterialMenu
+
+local MatScroll = Instance.new("ScrollingFrame")
+MatScroll.Size = UDim2.new(1, -10, 1, -10)
+MatScroll.Position = UDim2.fromOffset(5, 5)
+MatScroll.BackgroundTransparency = 1
+MatScroll.BorderSizePixel = 0
+MatScroll.CanvasSize = UDim2.fromOffset(0, 520)
+MatScroll.ScrollBarThickness = 4
+MatScroll.Parent = MaterialMenu
+
+local function rebuildMaterialGrid()
+	for _, child in ipairs(MatScroll:GetChildren()) do
+		if not child:IsA("UIGridLayout") and not child:IsA("UIListLayout") then child:Destroy() end
 	end
 	
-	-- Resolve local translation vectors
-	local workingCF = baseCF * CFrame.new(State.OffsetPosition)
-	return workingCF * CFrame.Angles(math.rad(State.OffsetRotation.X), math.rad(State.OffsetRotation.Y), math.rad(State.OffsetRotation.Z))
+	local currentY = 0
+	for catName, items in pairs(MaterialsManifest) do
+		table.sort(items)
+		local catLabel = Instance.new("TextLabel")
+		catLabel.Size = UDim2.new(1, -10, 0, 20)
+		catLabel.Position = UDim2.fromOffset(0, currentY)
+		catLabel.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+		catLabel.Text = "  " .. catName
+		catLabel.TextColor3 = Color3.fromRGB(220, 180, 100)
+		catLabel.TextXAlignment = Enum.TextAlignment.Left
+		catLabel.Font = Enum.Font.SourceSansBold
+		catLabel.TextSize = 13
+		catLabel.Parent = MatScroll
+		
+		currentY = currentY + 24
+		
+		for _, item in ipairs(items) do
+			local isSelected = MultiSelectedMaterials[item] or (State.SelectedMaterial == item)
+			local itemColor = isSelected and Color3.fromRGB(45, 110, 145) or Color3.fromRGB(55, 55, 60)
+			
+			local ibtn = createButton("Mat_" .. item, item, UDim2.fromOffset(5, currentY), UDim2.new(1, -15, 0, 22), MatScroll, itemColor)
+			ibtn.TextXAlignment = Enum.TextAlignment.Left
+			ibtn.Text = "   " .. item
+			
+			ibtn.MouseButton1Click:Connect(function()
+				if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) or UserInputService:IsKeyDown(Enum.KeyCode.RightControl) then
+					MultiSelectedMaterials[item] = not MultiSelectedMaterials[item]
+				else
+					table.clear(MultiSelectedMaterials)
+					State.SelectedMaterial = item
+				end
+				rebuildMaterialGrid()
+			end)
+			
+			currentY = currentY + 24
+		end
+	end
+	MatScroll.CanvasSize = UDim2.fromOffset(0, currentY + 10)
+end
+rebuildMaterialGrid()
+
+--------------------------------------------------------------------------------
+-- LOCAL PLATFORM (AirWalk Component Implementation)
+--------------------------------------------------------------------------------
+local AirWalkFrame = Instance.new("Frame")
+AirWalkFrame.Name = "AirWalkControls"
+AirWalkFrame.Size = UDim2.fromOffset(50, 150)
+AirWalkFrame.Position = UDim2.new(0, 15, 0.5, -75) -- Left Screen Dock Alignment
+AirWalkFrame.BackgroundTransparency = 1
+AirWalkFrame.Visible = false
+AirWalkFrame.Parent = ScreenGui
+
+local AW_V1 = createCircularBase("AW_V", 1, AirWalkFrame) AW_V1.Position = UDim2.fromOffset(0, 0)
+local AW_V2 = createCircularBase("AW_V", 2, AirWalkFrame) AW_V2.Position = UDim2.fromOffset(0, 52)
+local AW_V3 = createCircularBase("AW_V", 3, AirWalkFrame) AW_V3.Position = UDim2.fromOffset(0, 104)
+
+local AW_Up = createButton("AW_Up", "▲", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), AW_V1, Color3.fromRGB(60, 60, 65))
+local AW_Toggle = createButton("AW_Toggle", "ON", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), AW_V2, Color3.fromRGB(46, 117, 89))
+local AW_Down = createButton("AW_Down", "▼", UDim2.fromOffset(0, 0), UDim2.fromOffset(45, 45), AW_V3, Color3.fromRGB(60, 60, 65))
+
+local function syncAirWalkPlatform()
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+	
+	if State.AirWalkActive then
+		if not AirWalkPlatform then
+			AirWalkPlatform = Instance.new("Part")
+			AirWalkPlatform.Name = "LocalAirWalkAnchor"
+			AirWalkPlatform.Size = Vector3.new(6, 1, 6)
+			AirWalkPlatform.Transparency = 1
+			AirWalkPlatform.Anchored = true
+			AirWalkPlatform.CanCollide = true
+			AirWalkPlatform.Parent = workspace
+		end
+		AirWalkPlatform.CFrame = CFrame.new(hrp.Position.X, hrp.Position.Y - 3.5, hrp.Position.Z)
+	else
+		if AirWalkPlatform then
+			AirWalkPlatform:Destroy()
+			AirWalkPlatform = nil
+		end
+	end
 end
 
-local function RenderVisualEngine()
-	ClearLocalVisuals()
-	if not State.ShowPreview then return end
+local function offsetAirWalk(amount)
+	if AirWalkPlatform and State.AirWalkActive then
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			AirWalkPlatform.CFrame = AirWalkPlatform.CFrame + Vector3.new(0, amount, 0)
+			hrp.CFrame = hrp.CFrame + Vector3.new(0, amount, 0)
+		end
+	end
+end
+
+AW_Toggle.MouseButton1Click:Connect(function()
+	State.AirWalkActive = not State.AirWalkActive
+	AW_Toggle.BackgroundColor3 = State.AirWalkActive and Color3.fromRGB(46, 117, 89) or Color3.fromRGB(117, 46, 46)
+	AW_Toggle.Text = State.AirWalkActive and "ON" or "OFF"
+	AirWalkToggle.Text = "AirWalk: " .. (State.AirWalkActive and "ON" or "OFF")
+	AirWalkToggle.BackgroundColor3 = State.AirWalkActive and Color3.fromRGB(46, 117, 89) or Color3.fromRGB(75, 75, 80)
+	syncAirWalkPlatform()
+end)
+
+setupLongHold(AW_Up, function() offsetAirWalk(0.5) end)
+AW_Up.MouseButton1Click:Connect(function() offsetAirWalk(0.5) end)
+
+setupLongHold(AW_Down, function() offsetAirWalk(-0.5) end)
+AW_Down.MouseButton1Click:Connect(function() offsetAirWalk(-0.5) end)
+
+--------------------------------------------------------------------------------
+-- REPLICATION SYSTEMS & GIZMOS CONTROLLERS
+--------------------------------------------------------------------------------
+local function clearLocalGizmos()
+	for _, part in ipairs(GizmoParts) do part:Destroy() end
+	table.clear(GizmoParts)
+end
+
+local function drawAxisGizmo(centerCFrame)
+	clearLocalGizmos()
+	if not State.GizmosActive or not State.PreviewActive then return end
 	
-	local centerCF = GetTargetCenter()
-	local sourceStorage = ReplicatedStorage:FindFirstChild("Builds")
+	local axes = {
+		{Vector3.new(3, 0.1, 0.1), Color3.fromRGB(255, 50, 50)}, -- X Axis line configuration
+		{Vector3.new(0.1, 3, 0.1), Color3.fromRGB(50, 255, 50)}, -- Y Axis line configuration
+		{Vector3.new(0.1, 0.1, 3), Color3.fromRGB(50, 50, 255)}  -- Z Axis line configuration
+	}
 	
-	-- Generate locally simulated projections
-	for matName, active in pairs(State.SelectedMaterials) do
-		if active and sourceStorage then
-			local template = sourceStorage:FindFirstChild(matName)
-			if template then
-				local clone = template:Clone()
-				if clone:IsA("Model") then
-					clone:SetPrimaryPartCFrame(centerCF)
-					for _, p in pairs(clone:GetDescendants()) do
-						if p:IsA("BasePart") then
-							p.Transparency = 0.5
-							p.CanCollide = false
-							p.Anchored = true
-						end
-					end
-					clone.Parent = workspace
-					table.insert(State.PreviewModels, clone)
-				end
+	for _, info in ipairs(axes) do
+		local p = Instance.new("Part")
+		p.Size = info[1]
+		p.Color = info[2]
+		p.Material = Enum.Material.Neon
+		p.Anchored = true
+		p.CanCollide = false
+		p.Transparency = 0.2
+		
+		-- Center transformation mappings
+		if info[1].X > 0.1 then
+			p.CFrame = centerCFrame * CFrame.new(1.5, 0, 0)
+		elseif info[1].Y > 0.1 then
+			p.CFrame = centerCFrame * CFrame.new(0, 1.5, 0)
+		else
+			p.CFrame = centerCFrame * CFrame.new(0, 0, -1.5)
+		end
+		
+		p.Parent = workspace
+		table.insert(GizmoParts, p)
+	end
+end
+
+local function cleanActivePreview()
+	if ActivePreviewModel then
+		ActivePreviewModel:Destroy()
+		ActivePreviewModel = nil
+	end
+	clearLocalGizmos()
+end
+
+local function updatePreviewEngine()
+	if not State.PreviewActive then
+		cleanActivePreview()
+		return
+	end
+	
+	local targetModel = BuildsFolder:FindFirstChild(State.SelectedMaterial)
+	if not targetModel then return end
+	
+	if not ActivePreviewModel or ActivePreviewModel.Name ~= State.SelectedMaterial then
+		if ActivePreviewModel then ActivePreviewModel:Destroy() end
+		ActivePreviewModel = targetModel:Clone()
+		ActivePreviewModel.Parent = workspace
+		
+		for _, part in ipairs(ActivePreviewModel:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Transparency = 0.5
+				part.CanCollide = false
+				part.Anchored = true
 			end
 		end
 	end
 	
-	if State.ShowGizmos then
-		local axes = {
-			{Vector3.new(2, 0, 0), Color3.fromRGB(255, 50, 50)},   -- X: Red
-			{Vector3.new(0, 2, 0), Color3.fromRGB(50, 255, 50)},   -- Y: Green
-			{Vector3.new(0, 0, 2), Color3.fromRGB(50, 50, 255)}    -- Z: Blue
-		}
-		for _, data in pairs(axes) do
-			local gizmo = Create("Part", {
-				Size = data[1] + Vector3.new(0.2, 0.2, 0.2),
-				Color = data[2],
-				Transparency = 0.4,
-				Anchored = true,
-				CanCollide = false,
-				CFrame = centerCF * CFrame.new(data[1]/2),
-				Parent = workspace
-			})
-			table.insert(State.GizmoParts, gizmo)
-		end
-	end
-end
-
--- Hook updates into rendering ticks safely
-RunService.RenderStepped:Connect(function()
-	if State.ShowPreview then
-		local centerCF = GetTargetCenter()
-		for _, m in pairs(State.PreviewModels) do
-			if m.PrimaryPart then m:SetPrimaryPartCFrame(centerCF) end
-		end
-		-- Re-render anchors cleanly if structural transforms update
-		if #State.GizmoParts > 0 then RenderVisualEngine() end
-	end
-end)
-
--- ==========================================
--- CLUSTER BUTTON ARRAYS DOCK CONFIG
--- ==========================================
-Create("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal,
-	Padding = UDim.new(0, 6),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-	Parent = ClusterAFrame
-})
-
-Create("UIListLayout", {
-	FillDirection = Enum.FillDirection.Horizontal,
-	Padding = UDim.new(0, 6),
-	SortOrder = Enum.SortOrder.LayoutOrder,
-	Parent = ClusterBFrame
-})
-
-local function CreateBaseCircleBtn(parent, text, layoutOrder)
-	local btn = Create("TextButton", {
-		Size = UDim2.new(0, 44, 0, 44),
-		BackgroundColor3 = Color3.fromRGB(40, 40, 45),
-		BackgroundTransparency = 0.25,
-		Text = text,
-		TextColor3 = Color3.fromRGB(240, 240, 240),
-		Font = Enum.Font.SourceSansBold,
-		TextSize = 11,
-		LayoutOrder = layoutOrder,
-		Parent = parent
-	})
-	Create("UICorner", { CornerRadius = UDim.new(0, 22), Parent = btn })
-	return btn
-end
-
--- Split Dual-Action Circle Generator
-local function CreateSplitCircleBtn(parent, layoutOrder, upLabel, downLabel, onUp, onDown)
-	local base = Create("Frame", {
-		Size = UDim2.new(0, 44, 0, 44),
-		BackgroundTransparency = 1,
-		LayoutOrder = layoutOrder,
-		Parent = parent
-	})
-	
-	local upBtn = Create("TextButton", {
-		Size = UDim2.new(1, 0, 0.5, 0),
-		Position = UDim2.new(0, 0, 0, 0),
-		BackgroundColor3 = Color3.fromRGB(50, 50, 55),
-		BackgroundTransparency = 0.25,
-		Text = upLabel,
-		TextColor3 = Color3.fromRGB(240, 240, 240),
-		Font = Enum.Font.SourceSansBold,
-		TextSize = 10,
-		Parent = base
-	})
-	local upCorner = Create("UICorner", { CornerRadius = UDim.new(0, 22), Parent = upBtn })
-	
-	-- Inverted UI variant scheme configuration
-	local downBtn = Create("TextButton", {
-		Size = UDim2.new(1, 0, 0.5, 0),
-		Position = UDim2.new(0, 0, 0.5, 0),
-		BackgroundColor3 = Color3.fromRGB(220, 220, 225),
-		BackgroundTransparency = 0.25,
-		Text = downLabel,
-		TextColor3 = Color3.fromRGB(20, 20, 20),
-		Font = Enum.Font.SourceSansBold,
-		TextSize = 10,
-		Parent = base
-	})
-	local downCorner = Create("UICorner", { CornerRadius = UDim.new(0, 22), Parent = downBtn })
-	
-	HookLongHold(upBtn, onUp)
-	HookLongHold(downBtn, onDown)
-	
-	return base, upBtn, downBtn
-end
-
--- ==========================================
--- DOCK ACTIONS PIPELINE: CLUSTER A
--- ==========================================
-local ModeBtn = CreateBaseCircleBtn(ClusterAFrame, "Mode:\nRot", 1)
-
-local _, A2Up, A2Dn = CreateSplitCircleBtn(ClusterAFrame, 2, "Roll L", "Roll R", function() end, function() end)
-local _, A3Up, A3Dn = CreateSplitCircleBtn(ClusterAFrame, 3, "Pitch F", "Pitch B", function() end, function() end)
-local _, A4Up, A4Dn = CreateSplitCircleBtn(ClusterAFrame, 4, "Yaw L", "Yaw R", function() end, function() end)
-
-local InvertBtn = CreateBaseCircleBtn(ClusterAFrame, "Invert", 5)
-local ExtraMenuBtn = CreateBaseCircleBtn(ClusterAFrame, "More", 6)
-
-local function SyncClusterALabels()
-	if State.CurrentMode == "Rotation" then
-		ModeBtn.Text = "Mode:\nRot"
-		A2Up.Text = "R-X +" A2Dn.Text = "R-X -"
-		A3Up.Text = "R-Y +" A3Dn.Text = "R-Y -"
-		A4Up.Text = "R-Z +" A4Dn.Text = "R-Z -"
+	local trackingBase = Vector3.zero
+	if State.MobilityMode == "Cam" then
+		trackingBase = Camera.CFrame.Position + (Camera.CFrame.LookVector * 15)
 	else
-		ModeBtn.Text = "Mode:\nPos"
-		A2Up.Text = "P-X +" A2Dn.Text = "P-X -"
-		A3Up.Text = "P-Y +" A3Dn.Text = "P-Y -"
-		A4Up.Text = "P-Z +" A4Dn.Text = "P-Z -"
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			trackingBase = hrp.Position + (hrp.CFrame.LookVector * 15)
+		end
 	end
+	
+	local finalPosition = trackingBase + State.BuildCenterOffset
+	local finalCFrame = CFrame.new(finalPosition) * CFrame.fromEulerAnglesXYZ(
+		math.rad(State.CurrentRotation.X),
+		math.rad(State.CurrentRotation.Y),
+		math.rad(State.CurrentRotation.Z)
+	)
+	
+	if ActivePreviewModel:IsA("Model") then
+		ActivePreviewModel:PivotTo(finalCFrame)
+	elseif ActivePreviewModel:IsA("BasePart") then
+		ActivePreviewModel.CFrame = finalCFrame
+	end
+	
+	if State.GizmosActive then
+		drawAxisGizmo(finalCFrame)
+	else
+		clearLocalGizmos()
+	end
+end
+
+RunService.RenderStepped:Connect(updatePreviewEngine)
+
+--------------------------------------------------------------------------------
+-- INTERACTION ROUTINES & OPERATIONAL MATRIX
+--------------------------------------------------------------------------------
+local function runTransformationOffset(axis, directionalSign)
+	local multiplier = State.Inverted and -1 or 1
+	local increment = directionalSign * multiplier
+	
+	if State.Mode == "Rotation" then
+		local step = State.Rdifference * increment
+		if axis == "X" then
+			State.CurrentRotation = State.CurrentRotation + Vector3.new(step, 0, 0)
+		elseif axis == "Y" then
+			State.CurrentRotation = State.CurrentRotation + Vector3.new(0, step, 0)
+		elseif axis == "Z" then
+			State.CurrentRotation = State.CurrentRotation + Vector3.new(0, 0, step)
+		end
+	else
+		local step = State.Pdifference * increment
+		if axis == "X" then
+			State.BuildCenterOffset = State.BuildCenterOffset + Vector3.new(step, 0, 0)
+		elseif axis == "Y" then
+			State.BuildCenterOffset = State.BuildCenterOffset + Vector3.new(0, step, 0)
+		elseif axis == "Z" then
+			State.BuildCenterOffset = State.BuildCenterOffset + Vector3.new(0, 0, step)
+		end
+	end
+end
+
+local function applyLabelInterfaceMatrix()
+	if State.Mode == "Rotation" then
+		ModeBtn.Text = "ROT"
+		splitButtons[2].Up.Text = "Roll R"   splitButtons[2].Down.Text = "Roll L"
+		splitButtons[3].Up.Text = "Pitch F"  splitButtons[3].Down.Text = "Pitch B"
+		splitButtons[4].Up.Text = "Yaw R"    splitButtons[4].Down.Text = "Yaw L"
+	else
+		ModeBtn.Text = "POS"
+		splitButtons[2].Up.Text = "Right"    splitButtons[2].Down.Text = "Left"
+		splitButtons[3].Up.Text = "Up"       splitButtons[3].Down.Text = "Down"
+		splitButtons[4].Up.Text = "Forward"  splitButtons[4].Down.Text = "Back"
+	end
+end
+applyLabelInterfaceMatrix()
+
+-- Bind Axis Transformations Matrix to Cluster Inputs
+local axesKeys = {[2] = "X", [3] = "Y", [4] = "Z"}
+for index, config in pairs(splitButtons) do
+	local axis = axesKeys[index]
+	config.Up.MouseButton1Click:Connect(function() runTransformationOffset(axis, 1) end)
+	config.Down.MouseButton1Click:Connect(function() runTransformationOffset(axis, -1) end)
+	setupLongHold(config.Up, function() runTransformationOffset(axis, 1) end)
+	setupLongHold(config.Down, function() runTransformationOffset(axis, -1) end)
 end
 
 ModeBtn.MouseButton1Click:Connect(function()
-	State.CurrentMode = (State.CurrentMode == "Rotation") and "Position" or "Rotation"
-	SyncClusterALabels()
+	State.Mode = (State.Mode == "Rotation") and "Position" or "Rotation"
+	applyLabelInterfaceMatrix()
 end)
-
--- Execution Vectors processing routing
-local function ApplyTransformation(axis, direction, isDownPart)
-	local mult = direction * (isDownPart and -1 or 1)
-	if State.CurrentMode == "Rotation" then
-		local delta = State.RDifference * mult
-		if axis == "X" then State.OffsetRotation = State.OffsetRotation + Vector3.new(delta, 0, 0)
-		elseif axis == "Y" then State.OffsetRotation = State.OffsetRotation + Vector3.new(0, delta, 0)
-		elseif axis == "Z" then State.OffsetRotation = State.OffsetRotation + Vector3.new(0, 0, delta) end
-	else
-		local delta = State.PDifference * mult
-		if axis == "X" then State.OffsetPosition = State.OffsetPosition + Vector3.new(delta, 0, 0)
-		elseif axis == "Y" then State.OffsetPosition = State.OffsetPosition + Vector3.new(0, delta, 0)
-		elseif axis == "Z" then State.OffsetPosition = State.OffsetPosition + Vector3.new(0, 0, delta) end
-	end
-	RenderVisualEngine()
-end
-
-HookLongHold(A2Up, function() ApplyTransformation("X", 1, false) end)
-HookLongHold(A2Dn, function() ApplyTransformation("X", 1, true) end)
-HookLongHold(A3Up, function() ApplyTransformation("Y", 1, false) end)
-HookLongHold(A3Dn, function() ApplyTransformation("Y", 1, true) end)
-HookLongHold(A4Up, function() ApplyTransformation("Z", 1, false) end)
-HookLongHold(A4Dn, function() ApplyTransformation("Z", 1, true) end)
 
 InvertBtn.MouseButton1Click:Connect(function()
-	if State.CurrentMode == "Rotation" then
-		State.OffsetRotation = Vector3.new(-State.OffsetRotation.X, -State.OffsetRotation.Y, -State.OffsetRotation.Z)
-	else
-		State.OffsetPosition = Vector3.new(-State.OffsetPosition.X, -State.OffsetPosition.Y, -State.OffsetPosition.Z)
-	end
-	RenderVisualEngine()
+	State.Inverted = not State.Inverted
+	InvertBtn.BackgroundColor3 = State.Inverted and Color3.fromRGB(150, 60, 60) or Color3.fromRGB(80, 50, 50)
 end)
 
--- Extra Center Utility Layout (9 Matrix Processing)
-ExtraMenuBtn.MouseButton1Click:Connect(function()
-	CenterCategoryFrame.Visible = not CenterCategoryFrame.Visible
+--------------------------------------------------------------------------------
+-- CORE INTERFACE INTERACTION ROUTINES
+--------------------------------------------------------------------------------
+MasterToggle.MouseButton1Click:Connect(function()
+	State.ToolsVisible = not State.ToolsVisible
+	ClusterAFrame.Visible = State.ToolsVisible
+	ClusterBFrame.Visible = State.ToolsVisible
+	MasterToggle.BackgroundColor3 = State.ToolsVisible and Color3.fromRGB(26, 80, 59) or Color3.fromRGB(46, 117, 89)
 end)
 
-Create("UIGridLayout", {
-	CellSize = UDim2.new(0, 85, 0, 32),
-	CellPadding = UDim2.new(0, 6, 0, 6),
-	Parent = CenterCategoryFrame
-})
-
-local function CreateMatrixBtn(text, action)
-	local b = Create("TextButton", {
-		BackgroundColor3 = Color3.fromRGB(50, 50, 60),
-		Text = text,
-		TextColor3 = Color3.fromRGB(240, 240, 240),
-		Font = Enum.Font.SourceSansBold,
-		TextSize = 12,
-		Parent = CenterCategoryFrame
-	})
-	Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = b })
-	b.MouseButton1Click:Connect(action)
-end
-
--- Array Definition of 9 Custom Sub-management elements
-CreateMatrixBtn("Reset Rot X", function() State.OffsetRotation = Vector3.new(0, State.OffsetRotation.Y, State.OffsetRotation.Z) RenderVisualEngine() end)
-CreateMatrixBtn("Reset Rot Y", function() State.OffsetRotation = Vector3.new(State.OffsetRotation.X, 0, State.OffsetRotation.Z) RenderVisualEngine() end)
-CreateMatrixBtn("Reset Rot Z", function() State.OffsetRotation = Vector3.new(State.OffsetRotation.X, State.OffsetRotation.Y, 0) RenderVisualEngine() end)
-CreateMatrixBtn("Reset Pos X", function() State.OffsetPosition = Vector3.new(0, State.OffsetPosition.Y, State.OffsetPosition.Z) RenderVisualEngine() end)
-CreateMatrixBtn("Reset Pos Y", function() State.OffsetPosition = Vector3.new(State.OffsetPosition.X, 0, State.OffsetPosition.Z) RenderVisualEngine() end)
-CreateMatrixBtn("Reset Pos Z", function() State.OffsetPosition = Vector3.new(State.OffsetPosition.X, State.OffsetPosition.Y, 0) RenderVisualEngine() end)
-CreateMatrixBtn("Reset All Rot", function() State.OffsetRotation = Vector3.new(0, 0, 0) RenderVisualEngine() end)
-CreateMatrixBtn("Reset All Pos", function() State.OffsetPosition = Vector3.new(0, 0, -15) RenderVisualEngine() end)
-CreateMatrixBtn("Reset All", function() State.OffsetRotation = Vector3.new(0, 0, 0) State.OffsetPosition = Vector3.new(0, 0, -15) RenderVisualEngine() end)
-
--- ==========================================
--- DOCK ACTIONS PIPELINE: CLUSTER B
--- ==========================================
-local MatBtn = CreateBaseCircleBtn(ClusterBFrame, "Material", 1)
-local PreviewToggleBtn = CreateBaseCircleBtn(ClusterBFrame, "Preview:\nOFF", 2)
-local GizmoToggleBtn = CreateBaseCircleBtn(ClusterBFrame, "Gizmo:\nOFF", 3)
-local RDiffBtn = CreateBaseCircleBtn(ClusterBFrame, "RDiff:\n45", 4)
-local PDiffBtn = CreateBaseCircleBtn(ClusterBFrame, "PDiff:\n5", 5)
-local CountBtn = CreateBaseCircleBtn(ClusterBFrame, "Count:\n1", 6)
-
--- Material Grid Selection Engine Initialization
-MatBtn.MouseButton1Click:Connect(function()
-	MaterialGridFrame.Visible = not MaterialGridFrame.Visible
+AirWalkToggle.MouseButton1Click:Connect(function()
+	State.AirWalkActive = not State.AirWalkActive
+	AirWalkFrame.Visible = State.AirWalkActive
+	AirWalkToggle.Text = "AirWalk: " .. (State.AirWalkActive and "ON" or "OFF")
+	AirWalkToggle.BackgroundColor3 = State.AirWalkActive and Color3.fromRGB(46, 117, 89) or Color3.fromRGB(75, 75, 80)
+	AW_Toggle.BackgroundColor3 = State.AirWalkActive and Color3.fromRGB(46, 117, 89) or Color3.fromRGB(117, 46, 46)
+	AW_Toggle.Text = State.AirWalkActive and "ON" or "OFF"
+	syncAirWalkPlatform()
 end)
-CloseMatBtn.MouseButton1Click:Connect(function() MaterialGridFrame.Visible = false end)
 
-for _, matName in ipairs(BuildMaterials) do
-	local mBtn = Create("TextButton", {
-		BackgroundColor3 = Color3.fromRGB(45, 45, 50),
-		Text = matName,
-		TextColor3 = Color3.fromRGB(220, 220, 220),
-		Font = Enum.Font.SourceSans,
-		TextSize = 11,
-		Parent = MaterialScroll
-	})
-	Create("UICorner", { CornerRadius = UDim.new(0, 4), Parent = mBtn })
-	
-	mBtn.MouseButton1Click:Connect(function()
-		State.SelectedMaterials[matName] = not State.SelectedMaterials[matName]
-		mBtn.BackgroundColor3 = State.SelectedMaterials[matName] and Color3.fromRGB(35, 90, 150) or Color3.fromRGB(45, 45, 50)
-		RenderVisualEngine()
-	end)
-end
+MobilityToggle.MouseButton1Click:Connect(function()
+	State.MobilityMode = (State.MobilityMode == "Cam") and "Char" or "Cam"
+	MobilityToggle.Text = "Preview Mobility: " .. State.MobilityMode
+end)
 
 PreviewToggleBtn.MouseButton1Click:Connect(function()
-	State.ShowPreview = not State.ShowPreview
-	PreviewToggleBtn.Text = State.ShowPreview and "Preview:\nON" or "Preview:\nOFF"
-	RenderVisualEngine()
+	State.PreviewActive = not State.PreviewActive
+	PreviewToggleBtn.BackgroundColor3 = State.PreviewActive and Color3.fromRGB(46, 117, 89) or Color3.fromRGB(70, 70, 75)
 end)
 
-GizmoToggleBtn.MouseButton1Click:Connect(function()
-	State.ShowGizmos = not State.ShowGizmos
-	GizmoToggleBtn.Text = State.ShowGizmos and "Gizmo:\nON" or "Gizmo:\nOFF"
-	RenderVisualEngine()
+GizmosToggleBtn.MouseButton1Click:Connect(function()
+	State.GizmosActive = not State.GizmosActive
+	GizmosToggleBtn.BackgroundColor3 = State.GizmosActive and Color3.fromRGB(46, 117, 89) or Color3.fromRGB(70, 70, 75)
 end)
 
--- Multi-option Circular Dropdown Cycles Configuration
-local ROptions = {45, 22.5, 90, 180}
-local RIndex = 1
-RDiffBtn.MouseButton1Click:Connect(function()
-	RIndex = RIndex % #ROptions + 1
-	State.RDifference = ROptions[RIndex]
-	RDiffBtn.Text = "RDiff:\n" .. tostring(State.RDifference)
+MatMenuBtn.MouseButton1Click:Connect(function()
+	MaterialMenu.Visible = not MaterialMenu.Visible
 end)
 
-local POptions = {5, 1, 0.5, 10, 20}
-local PIndex = 1
-PDiffBtn.MouseButton1Click:Connect(function()
-	PIndex = PIndex % #POptions + 1
-	State.PDifference = POptions[PIndex]
-	PDiffBtn.Text = "PDiff:\n" .. tostring(State.PDifference)
+ResetsMenuBtn.MouseButton1Click:Connect(function()
+	ResetsWindow.Visible = not ResetsWindow.Visible
 end)
 
-local CountOptions = {1, 2, 3, 5, 10}
-local CountIndex = 1
-CountBtn.MouseButton1Click:Connect(function()
-	CountIndex = CountIndex % #CountOptions + 1
-	State.Count = CountOptions[CountIndex]
-	CountBtn.Text = "Count:\n" .. tostring(State.Count)
+-- Structural Window Close / Minimize Infrastructure Actions
+local isMinimized = false
+MinimizeBtn.MouseButton1Click:Connect(function()
+	isMinimized = not isMinimized
+	ScrollContainer.Visible = not isMinimized
+	MainWindow.Size = isMinimized and UDim2.fromOffset(210, 30) or UDim2.fromOffset(210, 240)
+	MinimizeBtn.Text = isMinimized and "+" or "-"
 end)
 
--- ==========================================
--- MATH EQUATION INTERPRETER & EXECUTION
--- ==========================================
-local function BuildEquationExecution()
-	local formulaStr = MathInput.Text
-	if formulaStr == "" then return end
+CloseBtn.MouseButton1Click:Connect(function()
+	cleanActivePreview()
+	if AirWalkPlatform then AirWalkPlatform:Destroy() end
+	ScreenGui:Destroy()
+end)
+
+--------------------------------------------------------------------------------
+-- RESET ACTIONS CONFIGURATION
+--------------------------------------------------------------------------------
+RX.MouseButton1Click:Connect(function() State.CurrentRotation = Vector3.new(0, State.CurrentRotation.Y, State.CurrentRotation.Z) end)
+RY.MouseButton1Click:Connect(function() State.CurrentRotation = Vector3.new(State.CurrentRotation.X, 0, State.CurrentRotation.Z) end)
+RZ.MouseButton1Click:Connect(function() State.CurrentRotation = Vector3.new(State.CurrentRotation.X, State.CurrentRotation.Y, 0) end)
+RAll.MouseButton1Click:Connect(function() State.CurrentRotation = Vector3.zero end)
+
+PX.MouseButton1Click:Connect(function() State.BuildCenterOffset = Vector3.new(0, State.BuildCenterOffset.Y, State.BuildCenterOffset.Z) end)
+PY.MouseButton1Click:Connect(function() State.BuildCenterOffset = Vector3.new(State.BuildCenterOffset.X, 0, State.BuildCenterOffset.Z) end)
+PZ.MouseButton1Click:Connect(function() State.BuildCenterOffset = Vector3.new(State.BuildCenterOffset.X, State.BuildCenterOffset.Y, -15) end)
+PAll.MouseButton1Click:Connect(function() State.BuildCenterOffset = Vector3.new(0, 0, -15) end)
+
+GlobalResetBtn.MouseButton1Click:Connect(function()
+	State.CurrentRotation = Vector3.zero
+	State.BuildCenterOffset = Vector3.new(0, 0, -15)
+end)
+
+--------------------------------------------------------------------------------
+-- ALGEBRAIC EQUATION RESOLUTION AND DEPLOYMENT REMOTE LOOPS
+--------------------------------------------------------------------------------
+local function fireDeploymentRemote(material, targetCFrame)
+	local payload = {
+		[1] = material,
+		[2] = targetCFrame
+	}
+	PlaceBuildRemote:InvokeServer(unpack(payload))
+end
+
+BuildEquationBtn.MouseButton1Click:Connect(function()
+	local formula = EquationInput.Text
+	if formula == "" then return end
 	
-	-- Strict Sanitize Check for execution safety injection
-	formulaStr = formulaStr:gsub(" ", "")
+	local trackingBase = Vector3.zero
+	if State.MobilityMode == "Cam" then
+		trackingBase = Camera.CFrame.Position + (Camera.CFrame.LookVector * 15)
+	else
+		local char = LocalPlayer.Character
+		local hrp = char and char:FindFirstChild("HumanoidRootPart")
+		if hrp then
+			trackingBase = hrp.Position + (hrp.CFrame.LookVector * 15)
+		end
+	end
 	
-	-- Simple dynamic solver step projection loop for 10 sequential iterations
-	for step = 1, 10 do
-		local x = step * 3
-		-- Basic programmatic processing translation framework matching simple functions: y = x^2 / 10
-		local processedStr = formulaStr:gsub("x%^2", tostring(x * x)):gsub("x", tostring(x))
+	local basePosition = trackingBase + State.BuildCenterOffset
+	local baseRotation = CFrame.fromEulerAnglesXYZ(
+		math.rad(State.CurrentRotation.X),
+		math.rad(State.CurrentRotation.Y),
+		math.rad(State.CurrentRotation.Z)
+	)
+	
+	-- Spatial Sequence Generation Loop Configuration (Step limits range: -10 to 10 studs)
+	for xStep = -10, 10, 2 do
+		local solvedY = evaluateMathExpression(formula, xStep)
+		local localOffsetVector = Vector3.new(xStep, solvedY, 0)
+		local compiledCFrame = CFrame.new(basePosition + localOffsetVector) * baseRotation
 		
-		local success, result = pcall(function()
-			-- Handles simple arithmetic configurations natively without loadstring environments
-			local cleanStr = processedStr:gsub("y=", "")
-			local divSplit = cleanStr:split("/")
-			if #divSplit == 2 then
-				return tonumber(divSplit[1]) / tonumber(divSplit[2])
-			end
-			return tonumber(cleanStr) or 0
-		end)
+		local pipelineMaterials = {}
+		for mat, active in pairs(MultiSelectedMaterials) do
+			if active then table.insert(pipelineMaterials, mat) end
+		end
+		if #pipelineMaterials == 0 then table.insert(pipelineMaterials, State.SelectedMaterial) end
 		
-		if success and result then
-			local calculatedY = result
-			local calculatedCF = GetTargetCenter() * CFrame.new(x, calculatedY, 0)
-			
-			for matName, active in pairs(State.SelectedMaterials) do
-				if active then
-					for i = 1, State.Count do
-						-- Stagger sequential steps via count multiplier variables
-						local passCF = calculatedCF * CFrame.new(0, 0, -(i - 1) * 4)
-						FireBuildRemote(matName, passCF)
-					end
-				end
+		for _, activeMat in ipairs(pipelineMaterials) do
+			for cycle = 1, State.Count do
+				-- Step displacement loop sequence iteration shift multiplier
+				local finalStagedCFrame = compiledCFrame * CFrame.new(0, 0, -(cycle - 1) * State.Pdifference)
+				task.spawn(fireDeploymentRemote, activeMat, finalStagedCFrame)
 			end
 		end
 	end
-end
+end)
 
-BuildMathBtn.MouseButton1Click:Connect(BuildEquationExecution)
+-- Immediate initial tracking configuration adjustment
+task.spawn(function()
+	local size = getScreenBounds(MainWindow)
+	MainWindow.Position = UDim2.new(0, size.X - 220, 0, 10)
+end)
 
--- Boot Setup
-SyncClusterALabels()
