@@ -1,7 +1,6 @@
 -- // --- [SECTION: INITIALIZATION & GLOBALS] ---
 local coreGui = game:GetService("CoreGui")
 if coreGui:FindFirstChild("BuilderGUI") then coreGui.BuilderGUI:Destroy() end
-if coreGui:FindFirstChild("AutoAttackGUI") then coreGui.AutoAttackGUI:Destroy() end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -21,7 +20,6 @@ local currentState = {
     multi = 1,
     previewActive = false,
     
-    -- Combat & Automation States
     attackEnabled = false,
     attackInterval = 0.2,
     parallelTriggers = 1,
@@ -29,16 +27,13 @@ local currentState = {
     autoFoodEnabled = true,
     antiLagEnabled = false,
     
-    -- Y-Lock Configuration State
     yLockEnabled = false,
     lockedYValue = 0,
 
-    -- Parametric Equation Configuration
     equationBuildEnabled = false,
     equationText = "y=2x\ny=x\ny=0.5x\ny=-0.5x\ny=-x\ny=-2x\nx=0\ny=0" 
 }
 
--- Airwalk Subsystem State (Default OFF)
 local airwalkEnabled = false
 local noclipEnabled = false
 local airwalkY = 0
@@ -49,7 +44,6 @@ local manualMovingDown = false
 local previewModel = nil
 local previewConnection = nil
 
--- Alphabetized Build Options
 local buildOptions = {
     "Bed", "Berry Farm", "Camp Fire", "Chair", "Corn Farm", "Fiber Farm", "Forge", 
     "Grill", "Ladder", "Lantern", "Mounted Torch", "Placeable Torch", 
@@ -64,6 +58,7 @@ local buildOptions = {
     "Wood Wall", "Wood Wall Door", "Wood Wall Glass Window", "Wood Wall Open Window", 
     "Wood Wall Window"
 }
+table.sort(buildOptions)
 
 -- // --- [SECTION: MAIN UI CONSTRUCTION] ---
 local ScreenGui = Instance.new("ScreenGui")
@@ -71,14 +66,12 @@ ScreenGui.Name = "BuilderGUI"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = coreGui
 
--- Main Base Frame (Height expanded to 390 to accommodate the multi-line equation workspace)
 local MainFrame = Instance.new("Frame")
 MainFrame.Size = UDim2.new(0, 540, 0, 390)
 MainFrame.Position = UDim2.new(0.5, -270, 0.5, -195)
 MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
 MainFrame.BackgroundTransparency = 0.2
 MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = false
 MainFrame.Parent = ScreenGui
 local UICorner = Instance.new("UICorner", MainFrame)
 UICorner.CornerRadius = UDim.new(0, 8)
@@ -103,7 +96,7 @@ local TitleLabel = Instance.new("TextLabel")
 TitleLabel.Size = UDim2.new(1, -60, 1, 0)
 TitleLabel.Position = UDim2.new(0, 10, 0, 0)
 TitleLabel.BackgroundTransparency = 1
-TitleLabel.Text = "Build & Combat Controller v6.0"
+TitleLabel.Text = "Build & Combat Controller v6.5"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
 TitleLabel.Font = Enum.Font.GothamBold
@@ -140,7 +133,6 @@ local ToggleLayout = Instance.new("UIListLayout", ToggleBar)
 ToggleLayout.FillDirection = Enum.FillDirection.Horizontal
 ToggleLayout.Padding = UDim.new(0, 6)
 
--- Minimization Icon Button
 local ExpandBtn = Instance.new("TextButton")
 ExpandBtn.Size = UDim2.new(1, 0, 1, 0)
 ExpandBtn.BackgroundColor3 = Color3.fromRGB(45, 125, 220)
@@ -150,10 +142,8 @@ ExpandBtn.TextColor3 = Color3.new(1, 1, 1)
 ExpandBtn.Font = Enum.Font.GothamBold
 ExpandBtn.Visible = false
 ExpandBtn.Parent = MainFrame
-local ExpandCorner = Instance.new("UICorner", ExpandBtn)
-ExpandCorner.CornerRadius = UDim.new(0, 8)
+Instance.new("UICorner", ExpandBtn).CornerRadius = UDim.new(0, 8)
 
--- Scroll Frame Layout Panel
 local ScrollFrame = Instance.new("ScrollingFrame")
 ScrollFrame.Size = UDim2.new(1, 0, 1, -68)
 ScrollFrame.Position = UDim2.new(0, 0, 0, 68)
@@ -397,9 +387,10 @@ setupHoldButton(HotbarButtons[7], function()
     else currentState.posZ = currentState.posZ - currentState.posDiff end
 end)
 
+-- Re-engineered Build Options Panel into a structural Width Grid
 local DropdownContainer = Instance.new("Frame")
-DropdownContainer.Size = UDim2.new(0, 170, 0, 130)
-DropdownContainer.Position = UDim2.new(0.5, -85, 0, -135)
+DropdownContainer.Size = UDim2.new(0, 310, 0, 160)
+DropdownContainer.Position = UDim2.new(0.5, -155, 0, -165)
 DropdownContainer.BackgroundTransparency = 1
 DropdownContainer.Visible = false
 DropdownContainer.ZIndex = 15
@@ -425,28 +416,28 @@ DropdownScroll.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
 DropdownScroll.BackgroundTransparency = 0.2
 DropdownScroll.BorderSizePixel = 0
 DropdownScroll.ScrollBarThickness = 4
-DropdownScroll.CanvasSize = UDim2.new(0, 0, 0, #buildOptions * 25)
 DropdownScroll.ZIndex = 15
 DropdownScroll.Parent = DropdownContainer
 Instance.new("UICorner", DropdownScroll).CornerRadius = UDim.new(0, 4)
 
-local DropdownLayout = Instance.new("UIListLayout", DropdownScroll)
+local DropdownLayout = Instance.new("UIGridLayout", DropdownScroll)
+DropdownLayout.CellSize = UDim2.new(0, 96, 0, 25)
+DropdownLayout.CellPadding = UDim2.new(0, 4, 0, 4)
 DropdownLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
 local optionButtons = {}
 for i, option in ipairs(buildOptions) do
     local OptionBtn = Instance.new("TextButton")
     OptionBtn.Size = UDim2.new(1, 0, 0, 25)
-    OptionBtn.BackgroundTransparency = (i % 2 == 0) and 0.8 or 0.9
     OptionBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
-    OptionBtn.Text = "  " .. option
+    OptionBtn.Text = option
     OptionBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
-    OptionBtn.TextXAlignment = Enum.TextXAlignment.Left
     OptionBtn.Font = Enum.Font.Gotham
-    OptionBtn.TextSize = 12
+    OptionBtn.TextSize = 10
     OptionBtn.LayoutOrder = i
     OptionBtn.ZIndex = 15
     OptionBtn.Parent = DropdownScroll
+    Instance.new("UICorner", OptionBtn).CornerRadius = UDim.new(0, 4)
     
     table.insert(optionButtons, {Button = OptionBtn, Name = option})
     
@@ -458,18 +449,26 @@ for i, option in ipairs(buildOptions) do
     end)
 end
 
+local function updateBuildCanvas()
+    local visibleCount = 0
+    for _, item in ipairs(optionButtons) do
+        if item.Button.Visible then visibleCount = visibleCount + 1 end
+    end
+    local rows = math.ceil(visibleCount / 3)
+    DropdownScroll.CanvasSize = UDim2.new(0, 0, 0, rows * 29)
+end
+updateBuildCanvas()
+
 SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
     local searchPattern = string.lower(SearchBar.Text)
-    local visibleCount = 0
     for _, item in ipairs(optionButtons) do
         if string.find(string.lower(item.Name), searchPattern) then
             item.Button.Visible = true
-            visibleCount = visibleCount + 1
         else
             item.Button.Visible = false
         end
     end
-    DropdownScroll.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 25)
+    updateBuildCanvas()
 end)
 
 DropdownMainBtn.MouseButton1Click:Connect(function() DropdownContainer.Visible = not DropdownContainer.Visible end)
@@ -477,30 +476,23 @@ DropdownMainBtn.MouseButton1Click:Connect(function() DropdownContainer.Visible =
 -- === COLUMN BUTTON POPULATION ===
 createLabel("⚙️ Modifiers", ModifierColumn)
 local MultiInput = createTextBox("Multiplier (Def: 1)", ModifierColumn)
-
 local AirwalkGuiToggleBtn = createButton("Airwalk Gui", ModifierColumn)
 AirwalkGuiToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
-
 local AutoFoodToggleBtn = createButton("Auto Food", ModifierColumn)
 AutoFoodToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
-
 local AntiLagToggleBtn = createButton("Anti Lag: OFF", ModifierColumn)
 AntiLagToggleBtn.BackgroundColor3 = Color3.fromRGB(120, 65, 65)
-
 local BuildToolsToggleBtn = createButton("Build Tools", ModifierColumn)
 BuildToolsToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
-
 local ItemsBtn = createButton("Items", ModifierColumn)
 ItemsBtn.BackgroundColor3 = Color3.fromRGB(142, 68, 173)
 
 createLabel("⚔️ Combat / Vitals", CombatColumn)
-
 local HpRow = Instance.new("Frame")
 HpRow.Size = UDim2.new(1, 0, 0, 28)
 HpRow.BackgroundTransparency = 1
 HpRow.LayoutOrder = nextOrder()
 HpRow.Parent = CombatColumn
-
 local HpButton = createButton("HP", HpRow, true)
 local HpBox = createTextBox("1000000000", HpRow)
 HpBox.Size = UDim2.new(0.48, 0, 1, 0)
@@ -512,16 +504,13 @@ CombatConfigRow.Size = UDim2.new(1, 0, 0, 28)
 CombatConfigRow.BackgroundTransparency = 1
 CombatConfigRow.LayoutOrder = nextOrder()
 CombatConfigRow.Parent = CombatColumn
-
 local IntervalBox = createTextBox("Secs (0.2)", CombatConfigRow)
 IntervalBox.Size = UDim2.new(0.48, 0, 1, 0)
 IntervalBox.Text = tostring(currentState.attackInterval)
-
 local ParallelBox = createTextBox("Loops (1)", CombatConfigRow)
 ParallelBox.Size = UDim2.new(0.48, 0, 1, 0)
 ParallelBox.Position = UDim2.new(0.52, 0, 0, 0)
 ParallelBox.Text = tostring(currentState.parallelTriggers)
-
 local ShowAttackBtn = createButton("Hide Attack Button", CombatColumn)
 ShowAttackBtn.BackgroundColor3 = Color3.fromRGB(70, 80, 95)
 
@@ -532,17 +521,13 @@ local DeleteBtn = createButton("Delete all build", AdvancedColumn)
 DeleteBtn.BackgroundColor3 = Color3.fromRGB(150, 45, 45)
 
 createLabel("📐 Expressions", AdvancedColumn)
-
 local EqToggleBtn = createButton("Equation Build: OFF", AdvancedColumn)
 EqToggleBtn.BackgroundColor3 = Color3.fromRGB(120, 65, 65)
-
--- Preset Selector Dropdown Initialization
 local EqPresetMainBtn = createButton("Presets ▼", AdvancedColumn)
 EqPresetMainBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
 
--- Large Multi-Line Equation Input Setup
 local EqInput = Instance.new("TextBox")
-EqInput.Size = UDim2.new(1, 0, 0, 110) -- Expanded viewport footprint
+EqInput.Size = UDim2.new(1, 0, 0, 110)
 EqInput.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
 EqInput.Text = currentState.equationText
 EqInput.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -551,12 +536,11 @@ EqInput.TextSize = 12
 EqInput.TextXAlignment = Enum.TextXAlignment.Left
 EqInput.TextYAlignment = Enum.TextYAlignment.Top
 EqInput.MultiLine = true
-EqInput.ClearTextOnFocus = false -- Kept contents intact during selection adjustments
+EqInput.ClearTextOnFocus = false
 EqInput.LayoutOrder = nextOrder()
 EqInput.Parent = AdvancedColumn
 Instance.new("UICorner", EqInput).CornerRadius = UDim.new(0, 4)
 
--- Replaced standard execution trigger with a structural safety clear button
 local ClearEqBtn = createButton("Clear Equation", AdvancedColumn)
 ClearEqBtn.BackgroundColor3 = Color3.fromRGB(150, 45, 45)
 
@@ -576,11 +560,7 @@ local function updateLayoutSize()
             activeColumns = activeColumns + 1
         end
     end
-    if activeColumns > 0 then
-        calculatedWidth = calculatedWidth + ((activeColumns - 1) * 12)
-    else
-        calculatedWidth = 220
-    end
+    if activeColumns > 0 then calculatedWidth = calculatedWidth + ((activeColumns - 1) * 12) else calculatedWidth = 220 end
     if calculatedWidth < 365 then calculatedWidth = 365 end 
     MainFrame.Size = UDim2.new(0, calculatedWidth, 0, 390)
     ScrollFrame.CanvasSize = UDim2.new(0, calculatedWidth - 20, 0, 320)
@@ -645,15 +625,10 @@ end
 
 local AirUpBtn = createCircularHUDButton("▲")
 AirUpBtn.LayoutOrder = 1
-
 local AirToggleBtn = createCircularHUDButton("●")
 AirToggleBtn.LayoutOrder = 2
-AirToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50) 
-
 local AirPhaseBtn = createCircularHUDButton("Ø")
 AirPhaseBtn.LayoutOrder = 3
-AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-
 local AirDownBtn = createCircularHUDButton("▼")
 AirDownBtn.LayoutOrder = 4
 
@@ -663,40 +638,24 @@ AirwalkGuiToggleBtn.MouseButton1Click:Connect(function()
 end)
 
 AirUpBtn.MouseButton1Down:Connect(function() manualMovingUp = true end)
-AirUpBtn.InputEnded:Connect(function(io)
-    if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then
-        manualMovingUp = false
-    end
-end)
+AirUpBtn.InputEnded:Connect(function(io) if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then manualMovingUp = false end end)
 
 local function setCharacterCollision(canCollide)
     if not player.Character then return end
-    for _, part in ipairs(player.Character:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = canCollide
-        end
-    end
+    for _, part in ipairs(player.Character:GetDescendants()) do if part:IsA("BasePart") then part.CanCollide = canCollide end end
 end
 
 AirDownBtn.MouseButton1Down:Connect(function() manualMovingDown = true end)
-AirDownBtn.InputEnded:Connect(function(io)
-    if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then
-        manualMovingDown = false
-    end
-end)
+AirDownBtn.InputEnded:Connect(function(io) if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then manualMovingDown = false end end)
 
 AirToggleBtn.MouseButton1Click:Connect(function()
     airwalkEnabled = not airwalkEnabled
     if airwalkEnabled then
         AirToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
-        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-            airwalkY = player.Character.HumanoidRootPart.Position.Y - 3.5
-        end
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then airwalkY = player.Character.HumanoidRootPart.Position.Y - 3.5 end
     else
         AirToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-        manualMovingUp = false
-        manualMovingDown = false
-        noclipEnabled = false
+        manualMovingUp = false manualMovingDown = false noclipEnabled = false
         AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
         setCharacterCollision(true) 
         if airwalkPart then airwalkPart:Destroy() airwalkPart = nil end
@@ -706,12 +665,7 @@ end)
 AirPhaseBtn.MouseButton1Click:Connect(function()
     if not airwalkEnabled then return end 
     noclipEnabled = not noclipEnabled
-    if noclipEnabled then
-        AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(142, 68, 173) 
-    else
-        AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-        setCharacterCollision(true) 
-    end
+    if noclipEnabled then AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(142, 68, 173) else AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50) setCharacterCollision(true) end
 end)
 
 RunService.Heartbeat:Connect(function(dt)
@@ -719,9 +673,7 @@ RunService.Heartbeat:Connect(function(dt)
         local rootPart = player.Character.HumanoidRootPart
         local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
         local currentFeetY = rootPart.Position.Y - 3.5
-        
         if airwalkY == 0 then airwalkY = currentFeetY end
-        
         if humanoid then
             local speed = 30 
             if manualMovingUp then
@@ -740,13 +692,11 @@ RunService.Heartbeat:Connect(function(dt)
                 airwalkY = currentFeetY
             end
         end
-        
         if noclipEnabled and player.Character then
             setCharacterCollision(false)
             rootPart.Velocity = Vector3.new(rootPart.Velocity.X, 0, rootPart.Velocity.Z)
             rootPart.CFrame = CFrame.new(rootPart.Position.X, airwalkY + 3.5, rootPart.Position.Z) * rootPart.CFrame.Rotation
         end
-        
         if not airwalkPart or not airwalkPart.Parent then
             airwalkPart = Instance.new("Part")
             airwalkPart.Name = "AirwalkBaseplate_V8"
@@ -792,83 +742,52 @@ end)
 RunService.Heartbeat:Connect(function()
     if currentState.antiLagEnabled then
         pcall(function()
-            if workspace:FindFirstChild("Resources") and workspace.Resources:FindFirstChild("Collectables") then
-                workspace.Resources.Collectables:ClearAllChildren()
-            end
+            if workspace:FindFirstChild("Resources") and workspace.Resources:FindFirstChild("Collectables") then workspace.Resources.Collectables:ClearAllChildren() end
             if workspace:FindFirstChild("Map") then
-                if workspace.Map:FindFirstChild("Large Bushes") then 
-                    workspace.Map["Large Bushes"]:ClearAllChildren() 
-                end
-                if workspace.Map:FindFirstChild("Ferns/Bushes") then 
-                    workspace.Map["Ferns/Bushes"]:ClearAllChildren() 
-                end
+                if workspace.Map:FindFirstChild("Large Bushes") then workspace.Map["Large Bushes"]:ClearAllChildren() end
+                if workspace.Map:FindFirstChild("Ferns/Bushes") then workspace.Map["Ferns/Bushes"]:ClearAllChildren() end
             end
-            if workspace:FindFirstChild("DamageIndicatorEffect") then
-                workspace.DamageIndicatorEffect:ClearAllChildren()
-            end
+            if workspace:FindFirstChild("DamageIndicatorEffect") then workspace.DamageIndicatorEffect:ClearAllChildren() end
         end)
     end
 end)
 
 
 -- // --- [SECTION: ADVANCED MULTI-LINE COMPILER ENGINE] ---
-local function snap(value, step)
-    if step == 0 then return value end
-    return math.round(value / step) * step
-end
+local function snap(value, step) if step == 0 then return value end return math.round(value / step) * step end
 
 local function getTargetCFrame()
     if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return CFrame.new() end
     local root = player.Character.HumanoidRootPart
     local baseCFrame = root.CFrame * CFrame.new(0, 0, -20)
-    
-    if currentState.yLockEnabled then
-        baseCFrame = CFrame.new(baseCFrame.X, currentState.lockedYValue, baseCFrame.Z) * baseCFrame.Rotation
-    else
-        currentState.lockedYValue = baseCFrame.Y
-    end
-    
+    if currentState.yLockEnabled then baseCFrame = CFrame.new(baseCFrame.X, currentState.lockedYValue, baseCFrame.Z) * baseCFrame.Rotation else currentState.lockedYValue = baseCFrame.Y end
     local finalX = snap(currentState.posX, currentState.snapGrid)
     local finalY = snap(currentState.posY, currentState.snapGrid)
     local finalZ = snap(currentState.posZ, currentState.snapGrid)
-    
     local finalRotX = snap(currentState.rotX, currentState.snapAngle)
     local finalRotY = snap(currentState.rotY, currentState.snapAngle)
     local finalRotZ = snap(currentState.rotZ, currentState.snapAngle)
-    
     return baseCFrame * CFrame.new(finalX, finalY, finalZ) * CFrame.Angles(math.rad(finalRotX), math.rad(finalRotY), math.rad(finalRotZ))
 end
 
--- Completely rewritten generation pipeline to support multi-expression parsing vectors
 local function getEquationCFrames()
     local cframes = {}
     local totalObjects = math.max(1, currentState.multi)
     local baseCF = getTargetCFrame()
-    
-    -- Split expression workspace safely by newlines
     local equationsList = string.split(currentState.equationText, "\n")
     
     for _, rawEquation in ipairs(equationsList) do
-        -- Complete space sanitization & token alignment parsing
         local line = string.lower(string.gsub(rawEquation, "%s+", ""))
-        
         if line ~= "" then
             local mode = "y"
             local expr = line
+            if string.sub(line, 1, 2) == "r=" then mode = "r" expr = string.sub(line, 3)
+            elseif string.sub(line, 1, 2) == "x=" then mode = "x" expr = string.sub(line, 3)
+            elseif string.sub(line, 1, 2) == "y=" then mode = "y" expr = string.sub(line, 3) end
             
-            if string.sub(line, 1, 2) == "r=" then
-                mode = "r" expr = string.sub(line, 3)
-            elseif string.sub(line, 1, 2) == "x=" then
-                mode = "x" expr = string.sub(line, 3)
-            elseif string.sub(line, 1, 2) == "y=" then
-                mode = "y" expr = string.sub(line, 3)
-            end
-            
-            -- Regex string mutations to seamlessly inject math multiplication rules
-            expr = string.gsub(expr, "(%d)([%a%(])", "%1*%2") -- e.g., 2x -> 2*x
-            expr = string.gsub(expr, "^%-([%a%(])", "-1*%1")  -- e.g., -x -> -1*x
-            expr = string.gsub(expr, "([%+%-%*%/%%^%(])%-([%a%(])", "%1-1*%2") -- Handle operator chains
-            
+            expr = string.gsub(expr, "(%d)([%a%(])", "%1*%2")
+            expr = string.gsub(expr, "^%-([%a%(])", "-1*%1")
+            expr = string.gsub(expr, "([%+%-%*%/%%^%(])%-([%a%(])", "%1-1*%2")
             local env = setmetatable({}, {__index = math})
             
             if mode == "r" then
@@ -882,15 +801,12 @@ local function getEquationCFrames()
                             env.theta = theta
                             local success2, radius = pcall(generated, theta, i)
                             if success2 and type(radius) == "number" then
-                                local xVal = math.cos(theta) * radius
-                                local yVal = math.sin(theta) * radius
-                                table.insert(cframes, baseCF * CFrame.new(xVal, yVal, 0))
+                                table.insert(cframes, baseCF * CFrame.new(math.cos(theta) * radius, math.sin(theta) * radius, 0))
                             end
                         end
                     end
                 end
             elseif mode == "x" then
-                -- Vertical Line Logic: X stays uniform while Y scales sequentially
                 local func = loadstring("return function(i) return " .. expr .. " end")
                 if func then
                     local success, generated = pcall(func)
@@ -898,10 +814,7 @@ local function getEquationCFrames()
                         setfenv(generated, env)
                         for i = 1, totalObjects do
                             local success2, xVal = pcall(generated, i)
-                            if success2 and type(xVal) == "number" then
-                                local yVal = (i - 1) * 4
-                                table.insert(cframes, baseCF * CFrame.new(xVal, yVal, 0))
-                            end
+                            if success2 and type(xVal) == "number" then table.insert(cframes, baseCF * CFrame.new(xVal, (i - 1) * 4, 0)) end
                         end
                     end
                 end
@@ -914,16 +827,13 @@ local function getEquationCFrames()
                         for i = 1, totalObjects do
                             local xVal = (i - 1) * 4
                             local success2, yVal = pcall(generated, xVal, i)
-                            if success2 and type(yVal) == "number" then
-                                table.insert(cframes, baseCF * CFrame.new(xVal, yVal, 0))
-                            end
+                            if success2 and type(yVal) == "number" then table.insert(cframes, baseCF * CFrame.new(xVal, yVal, 0)) end
                         end
                     end
                 end
             end
         end
     end
-    
     if #cframes == 0 then return {baseCF} end
     return cframes
 end
@@ -932,8 +842,7 @@ YLockBtn.MouseButton1Click:Connect(function()
     currentState.yLockEnabled = not currentState.yLockEnabled
     if currentState.yLockEnabled then
         YLockBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
-        local initialCF = getTargetCFrame()
-        currentState.lockedYValue = initialCF.Y
+        currentState.lockedYValue = getTargetCFrame().Y
     else
         YLockBtn.BackgroundColor3 = Color3.fromRGB(120, 65, 65)
     end
@@ -942,81 +851,41 @@ end)
 local function executeBuild()
     local Remote = ReplicatedStorage:FindFirstChild("PlaceBuild")
     if not Remote then return end
-    
     if currentState.equationBuildEnabled then
         local targetCFrames = getEquationCFrames()
-        for _, cf in ipairs(targetCFrames) do
-            task.spawn(function() Remote:InvokeServer(currentState.buildName, cf) end)
-        end
+        for _, cf in ipairs(targetCFrames) do task.spawn(function() Remote:InvokeServer(currentState.buildName, cf) end) end
     else
         local buildCF = getTargetCFrame() 
-        for i = 1, currentState.multi do
-            task.spawn(function() Remote:InvokeServer(currentState.buildName, buildCF) end)
-        end
+        for i = 1, currentState.multi do task.spawn(function() Remote:InvokeServer(currentState.buildName, buildCF) end) end
     end
 end
 
--- Owner Validation Wipe Hook Up
+-- Server-Side Replication Deletion Hook Up
 DeleteBtn.MouseButton1Click:Connect(function()
     if DeleteInput.Text == "Delete" then
-        if workspace:FindFirstChild("PlayerBuilds") then
-            for _, build in ipairs(workspace.PlayerBuilds:GetChildren()) do
-                if build:FindFirstChild("Owner") and (build.Owner.Value == player or build.Owner.Value == player.Name or build.Owner.Value == tostring(player.UserId)) then
-                    build:Destroy()
-                end
-            end
-        end
+        local args = {
+            Instance.new("Model", nil)
+        }
+        local deleteRemote = ReplicatedStorage:WaitForChild("DeleteBuild")
+        deleteRemote:FireServer(unpack(args))
         DeleteInput.Text = ""
     end
 end)
 
 ItemsBtn.MouseButton1Click:Connect(function()
     local DropRemote = ReplicatedStorage:WaitForChild("Drop")
-    local itemsToDrop = {
-        "Bandages", "Cooked Meat", "Stone", "Animal Hide", "Iron Ore", 
-        "Water", "Fiber", "Berries", "Raw Meat", "Wood", 
-        "Berry Seeds", "Fiber Seeds", "Corn Seeds", "Corn"
-    }
-    for _, itemName in ipairs(itemsToDrop) do
-        task.spawn(function() DropRemote:FireServer(itemName, -1000000000) end)
-    end
+    local itemsToDrop = {"Bandages", "Cooked Meat", "Stone", "Animal Hide", "Iron Ore", "Water", "Fiber", "Berries", "Raw Meat", "Wood", "Berry Seeds", "Fiber Seeds", "Corn Seeds", "Corn"}
+    for _, itemName in ipairs(itemsToDrop) do task.spawn(function() DropRemote:FireServer(itemName, -1000000000) end) end
 end)
 
-HpBox.FocusLost:Connect(function()
-    local num = tonumber(HpBox.Text)
-    currentState.hpValue = num and -math.abs(num) or -1000000000
-    HpBox.Text = tostring(math.abs(currentState.hpValue))
-end)
+HpBox.FocusLost:Connect(function() currentState.hpValue = tonumber(HpBox.Text) and -math.abs(tonumber(HpBox.Text)) or -1000000000 HpBox.Text = tostring(math.abs(currentState.hpValue)) end)
+HpButton.MouseButton1Click:Connect(function() pcall(function() player:WaitForChild("PlayerGui"):WaitForChild("Vitals"):WaitForChild("FallDamageEvent"):FireServer(currentState.hpValue) end) end)
+IntervalBox.FocusLost:Connect(function() currentState.attackInterval = (tonumber(IntervalBox.Text) and tonumber(IntervalBox.Text) > 0) and tonumber(IntervalBox.Text) or 0.2 IntervalBox.Text = tostring(currentState.attackInterval) end)
+ParallelBox.FocusLost:Connect(function() currentState.parallelTriggers = (tonumber(ParallelBox.Text) and tonumber(ParallelBox.Text) >= 1) and math.floor(tonumber(ParallelBox.Text)) or 1 ParallelBox.Text = tostring(currentState.parallelTriggers) end)
 
-HpButton.MouseButton1Click:Connect(function()
-    pcall(function()
-        player:WaitForChild("PlayerGui"):WaitForChild("Vitals"):WaitForChild("FallDamageEvent"):FireServer(currentState.hpValue)
-    end)
-end)
-
-IntervalBox.FocusLost:Connect(function()
-    local num = tonumber(IntervalBox.Text)
-    currentState.attackInterval = (num and num > 0) and num or 0.2
-    IntervalBox.Text = tostring(currentState.attackInterval)
-end)
-
-ParallelBox.FocusLost:Connect(function()
-    local num = tonumber(ParallelBox.Text)
-    currentState.parallelTriggers = (num and num >= 1) and math.floor(num) or 1
-    ParallelBox.Text = tostring(currentState.parallelTriggers)
-end)
-
-local function toggleAttackEngine()
-    currentState.attackEnabled = not currentState.attackEnabled
-    MobileAttackToggle.Text = currentState.attackEnabled and "ON" or "OFF"
-    MobileAttackToggle.BackgroundColor3 = currentState.attackEnabled and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
-end
+local function toggleAttackEngine() currentState.attackEnabled = not currentState.attackEnabled MobileAttackToggle.Text = currentState.attackEnabled and "ON" or "OFF" MobileAttackToggle.BackgroundColor3 = currentState.attackEnabled and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0) end
 MobileAttackToggle.MouseButton1Click:Connect(toggleAttackEngine)
-
-ShowAttackBtn.MouseButton1Click:Connect(function()
-    MobileAttackToggle.Visible = not MobileAttackToggle.Visible
-    ShowAttackBtn.Text = MobileAttackToggle.Visible and "Hide Attack Button" or "Show Attack Button"
-end)
+ShowAttackBtn.MouseButton1Click:Connect(function() MobileAttackToggle.Visible = not MobileAttackToggle.Visible ShowAttackBtn.Text = MobileAttackToggle.Visible and "Hide Attack Button" or "Show Attack Button" end)
 
 task.spawn(function()
     while true do
@@ -1025,9 +894,7 @@ task.spawn(function()
             if Tool then
                 local AttackEvent = Tool:FindFirstChild("AttackEvent")
                 if AttackEvent and AttackEvent:IsA("RemoteEvent") then
-                    for i = 1, currentState.parallelTriggers do
-                        task.spawn(function() pcall(function() AttackEvent:FireServer() end) end)
-                    end
+                    for i = 1, currentState.parallelTriggers do task.spawn(function() pcall(function() AttackEvent:FireServer() end) end) end
                 end
             end
         end
@@ -1042,68 +909,36 @@ refreshPreviewVisual = function(forceResetState)
     else
         currentState.previewActive = not currentState.previewActive
     end
-    
     ShowBtn.Text = currentState.previewActive and "Hide Prev." or "Preview (P)"
-    if not currentState.previewActive then
-        if previewConnection then previewConnection:Disconnect() end
-        if previewModel then previewModel:Destroy() previewModel = nil end
-        return
-    end
+    if not currentState.previewActive then if previewConnection then previewConnection:Disconnect() end if previewModel then previewModel:Destroy() previewModel = nil end return end
     
     local buildsFolder = ReplicatedStorage:FindFirstChild("Builds")
     local targetTemplate = buildsFolder and buildsFolder:FindFirstChild(currentState.buildName)
-    if not targetTemplate then
-        currentState.previewActive = false
-        ShowBtn.Text = "Preview (P)"
-        return
-    end
+    if not targetTemplate then currentState.previewActive = false ShowBtn.Text = "Preview (P)" return end
     
     if currentState.equationBuildEnabled then
-        previewModel = Instance.new("Model")
-        previewModel.Name = "Local_EquationPreview"
-        
+        previewModel = Instance.new("Model") previewModel.Name = "Local_EquationPreview"
         local cframes = getEquationCFrames()
         for i = 1, #cframes do
             local clone = targetTemplate:Clone()
-            for _, item in ipairs(clone:GetDescendants()) do
-                if item:IsA("BasePart") then
-                    item.Anchored = true item.CanCollide = false item.CastShadow = false item.Transparency = 0.5
-                end
-            end
+            for _, item in ipairs(clone:GetDescendants()) do if item:IsA("BasePart") then item.Anchored = true item.CanCollide = false item.CastShadow = false item.Transparency = 0.5 end end
             if clone:IsA("Model") then clone:PivotTo(cframes[i]) else clone.CFrame = cframes[i] end
             clone.Parent = previewModel
         end
         previewModel.Parent = workspace
     else
-        previewModel = targetTemplate:Clone()
-        previewModel.Name = "Local_BuildPreview"
-        for _, item in ipairs(previewModel:GetDescendants()) do
-            if item:IsA("BasePart") then
-                item.Anchored = true item.CanCollide = false item.CastShadow = false item.Transparency = 0.4
-            end
-        end
+        previewModel = targetTemplate:Clone() previewModel.Name = "Local_BuildPreview"
+        for _, item in ipairs(previewModel:GetDescendants()) do if item:IsA("BasePart") then item.Anchored = true item.CanCollide = false item.CastShadow = false item.Transparency = 0.4 end end
         previewModel.Parent = workspace
     end
     
     if previewConnection then previewConnection:Disconnect() end
     previewConnection = RunService.RenderStepped:Connect(function()
         if not currentState.previewActive or not previewModel or not previewModel:IsDescendantOf(workspace) then return end
-        
         if currentState.equationBuildEnabled then
-            local cframes = getEquationCFrames()
-            local children = previewModel:GetChildren()
-            
-            if #cframes ~= #children then
-                task.spawn(function() refreshPreviewVisual(true) end)
-                return
-            end
-            
-            for idx, cf in ipairs(cframes) do
-                local child = children[idx]
-                if child then
-                    if child:IsA("Model") then child:PivotTo(cf) else child.CFrame = cf end
-                end
-            end
+            local cframes = getEquationCFrames() local children = previewModel:GetChildren()
+            if #cframes ~= #children then task.spawn(function() refreshPreviewVisual(true) end) return end
+            for idx, cf in ipairs(cframes) do local child = children[idx] if child then if child:IsA("Model") then child:PivotTo(cf) else child.CFrame = cf end end end
         else
             previewModel:PivotTo(getTargetCFrame())
         end
@@ -1111,42 +946,123 @@ refreshPreviewVisual = function(forceResetState)
 end
 
 BuildBtn.MouseButton1Click:Connect(executeBuild)
-
-EqToggleBtn.MouseButton1Click:Connect(function()
-    currentState.equationBuildEnabled = not currentState.equationBuildEnabled
-    EqToggleBtn.Text = currentState.equationBuildEnabled and "Equation Build: ON" or "Equation Build: OFF"
-    EqToggleBtn.BackgroundColor3 = currentState.equationBuildEnabled and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(120, 65, 65)
-    if currentState.previewActive then refreshPreviewVisual(true) end
-end)
-
-EqInput:GetPropertyChangedSignal("Text"):Connect(function()
-    currentState.equationText = EqInput.Text
-    if currentState.previewActive then refreshPreviewVisual(true) end
-end)
-
-ClearEqBtn.MouseButton1Click:Connect(function()
-    EqInput.Text = ""
-    currentState.equationText = ""
-    if currentState.previewActive then refreshPreviewVisual(true) end
-end)
-
+EqToggleBtn.MouseButton1Click:Connect(function() currentState.equationBuildEnabled = not currentState.equationBuildEnabled EqToggleBtn.Text = currentState.equationBuildEnabled and "Equation Build: ON" or "Equation Build: OFF" EqToggleBtn.BackgroundColor3 = currentState.equationBuildEnabled and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(120, 65, 65) if currentState.previewActive then refreshPreviewVisual(true) end end)
+EqInput:GetPropertyChangedSignal("Text"):Connect(function() currentState.equationText = EqInput.Text if currentState.previewActive then refreshPreviewVisual(true) end end)
+ClearEqBtn.MouseButton1Click:Connect(function() EqInput.Text = "" currentState.equationText = "" if currentState.previewActive then refreshPreviewVisual(true) end end)
 ShowBtn.MouseButton1Click:Connect(function() refreshPreviewVisual(false) end)
+MultiInput.FocusLost:Connect(function() currentState.multi = tonumber(MultiInput.Text) or 1 if currentState.previewActive then refreshPreviewVisual(true) end end)
 
-MultiInput.FocusLost:Connect(function() 
-    currentState.multi = tonumber(MultiInput.Text) or 1 
-    if currentState.previewActive then refreshPreviewVisual(true) end
-end)
+UserInputService.InputBegan:Connect(function(input, processed) if processed then return end if input.KeyCode == Enum.KeyCode.B then executeBuild() elseif input.KeyCode == Enum.KeyCode.P then refreshPreviewVisual(false) end end)
 
-UserInputService.InputBegan:Connect(function(input, processed)
-    if processed then return end
-    if input.KeyCode == Enum.KeyCode.B then executeBuild()
-    elseif input.KeyCode == Enum.KeyCode.P then refreshPreviewVisual(false) end
-end)
 
+-- // --- [SECTION: 100 EXPANDED PRESET DATABASE LIBRARY] ---
+local originalPresets = {
+    {Name = "12 Leaf Polar Rose", Text = "r=20*cos(6*theta)"},
+    {Name = "3 Leaf Polar Clover", Text = "r=18*cos(3*theta)"},
+    {Name = "4 Petal Classic Flower", Text = "r=15*sin(2*theta)"},
+    {Name = "5 Point Radial Star", Text = "r=14+sin(5*theta)*4"},
+    {Name = "7 Blade Propeller Ring", Text = "r=15+cos(7*theta)*3"},
+    {Name = "8 Petal Geometric Blossom", Text = "r=20*sin(4*theta)"},
+    {Name = "Absolute Value V Shape", Text = "y=abs(x)"},
+    {Name = "Alternating Linear Slopes", Text = "y=3x\ny=-3x"},
+    {Name = "Alternating Sine Lattice", Text = "y=sin(x)*4\ny=-sin(x)*4"},
+    {Name = "Archimedean Wide Spiral", Text = "r=theta*3"},
+    {Name = "Asymmetric Polar Web", Text = "r=10+cos(3*theta)*5+sin(2*theta)*2"},
+    {Name = "Astroid Geometry Loop", Text = "r=15*(abs(cos(theta))^3+abs(sin(theta))^3)"},
+    {Name = "Atom Energy Rings", Text = "r=16+cos(3*theta)*6"},
+    {Name = "Axis Cross Only", Text = "x=0\ny=0"},
+    {Name = "Biohazard Tri Loop", Text = "r=12+sin(3*theta)*7"},
+    {Name = "Bound Wave Envelope", Text = "y=sin(x)*x*0.2"},
+    {Name = "Bowtie Infinity Loop", Text = "r=15*abs(cos(2*theta))"},
+    {Name = "Butterfly Ring Plane", Text = "r=12+sin(theta)*5"},
+    {Name = "Cardioid Heart Ring", Text = "r=12*(1-sin(theta))"},
+    {Name = "Chevron Modular Ridges", Text = "y=abs(sin(x/4))*6"},
+    {Name = "Circle Frame High Inward", Text = "r=8"},
+    {Name = "Circle Frame Mid Range", Text = "r=16"},
+    {Name = "Circle Frame Outer Range", Text = "r=32"},
+    {Name = "Complex Wave Modulation", Text = "y=sin(x)*3+cos(x/2)*4"},
+    {Name = "Cos Ripple Target", Text = "y=cos(x/2)*6"},
+    {Name = "Cubic Function S Curve", Text = "y=(x^3)/200"},
+    {Name = "Damped Harmonic Decay", Text = "y=15*exp(-0.05*x)*sin(x)"},
+    {Name = "Decaying Orbit Inward", Text = "r=30-theta*1.5"},
+    {Name = "Diagonal Intersect Lattice", Text = "y=x\ny=-x"},
+    {Name = "Double Cardioid Twin Loop", Text = "r=10*(1+cos(2*theta))"},
+    {Name = "Double Frequency Wave", Text = "y=sin(x*2)*5"},
+    {Name = "Double Spiral Interloop", Text = "r=theta*2\nr=theta*2+math.pi"},
+    {Name = "Epicycloid Star Ring", Text = "r=12+4*cos(4*theta)"},
+    {Name = "Expanded Grid Columns", Text = "x=0\nx=12\nx=-12"},
+    {Name = "Expanded Horizon Tiers", Text = "y=0\y=8\y=-8"},
+    {Name = "Exponential Ascent", Text = "y=exp(x/8)"},
+    {Name = "Fermat Spiral Swirl", Text = "r=8*sqrt(theta)"},
+    {Name = "Fine Crosshatch Lattice", Text = "y=x\ny=-x\nx=0\ny=0"},
+    {Name = "Frequency Modulated Wave", Text = "y=sin(x+sin(x))*6"},
+    {Name = "Gear Teeth Spike Ring", Text = "r=15+abs(sin(8*theta))*4"},
+    {Name = "Golden Ratio Spiral", Text = "r=1.618^theta"},
+    {Name = "Helix Grid Concentric", Text = "r=5+theta*2"},
+    {Name = "High Frequency Compression", Text = "y=sin(x*3)*4"},
+    {Name = "Horizontal Parallel Tracks", Text = "y=4\ny=-4"},
+    {Name = "Hyperbolic Spiral Curve", Text = "r=50/theta"},
+    {Name = "Hyperbolic Tangent Step", Text = "y=tanh(x/4)*10"},
+    {Name = "Infinite Loops Lemniscate", Text = "r=18*sqrt(abs(cos(2*theta)))"},
+    {Name = "Interlocking Wave Strands", Text = "y=sin(x/2)*6\y=sin(x/2+3.14)*6"},
+    {Name = "Intersecting Ray Fan", Text = "y=0.2x\ny=-0.2x"},
+    {Name = "Inverse Linear Wave", Text = "y=40/(x+1)"},
+    {Name = "Left Lean Diagonal Track", Text = "y=-x"},
+    {Name = "Limaçon Loop Configuration", Text = "r=8+12*cos(theta)"},
+    {Name = "Logarithmic Growth Ascent", Text = "y=log(abs(x)+1)*6"},
+    {Name = "Logarithmic Spiral Wave", Text = "r=3*exp(0.2*theta)"},
+    {Name = "Low Frequency Swell", Text = "y=sin(x/6)*8"},
+    {Name = "Maltese Cross Structural", Text = "r=12+cos(4*theta)*8"},
+    {Name = "Multi Layer Rosette Star", Text = "r=10*sin(2*theta)+8*cos(4*theta)"},
+    {Name = "Narrow Slopes Core V", Text = "y=4x\ny=-4x"},
+    {Name = "Nephroid Ring Twin Frame", Text = "r=12*(1+2*abs(cos(theta)))"},
+    {Name = "Octagram Geometry Star", Text = "r=14+sin(8*theta)*5"},
+    {Name = "Offset Circle Loop Alpha", Text = "r=16+cos(theta)*12"},
+    {Name = "Parabola Core Valley Down", Text = "y=-(x^2)/16"},
+    {Name = "Parabola Core Valley Up", Text = "y=(x^2)/16"},
+    {Name = "Parallel Vertical Columns", Text = "x=6\nx=-6"},
+    {Name = "Perfect Center Ring", Text = "r=15"},
+    {Name = "Phase Shifted Waves Twin", Text = "y=sin(x)*5\y=cos(x)*5"},
+    {Name = "Polar Hexagon Approximation", Text = "r=15/(abs(cos(theta))+0.5)"},
+    {Name = "Polar Propeller Triple", Text = "r=12+cos(3*theta)*6"},
+    {Name = "Polynomial Crest Profile", Text = "y=10-(x^2)/20"},
+    {Name = "Quadrifolium Four Leaf", Text = "r=20*abs(sin(2*theta))"},
+    {Name = "Radiating Core Spokes Ring", Text = "r=theta*0.5"},
+    {Name = "Right Lean Diagonal Track", Text = "y=x"},
+    {Name = "Rippling Curtain Lattice", Text = "y=cos(x)*3\ny=cos(x+1.5)*3"},
+    {Name = "Rolling Ocean Waves", Text = "y=sin(x/3)*5+cos(x/2)*2"},
+    {Name = "Rounded Square Matrix", Text = "r=16/(abs(sin(theta))+abs(cos(theta)))"},
+    {Name = "Sawtooth Wave Simulation", Text = "y=(x%6)-3"},
+    {Name = "Sharp Point Shuriken Star", Text = "r=12/(abs(sin(4*theta))+0.2)"},
+    {Name = "Sine Wave Lattice Grid", Text = "y=sin(x/4)*8\ny=-sin(x/4)*8"},
+    {Name = "Soundwave Peak Envelope", Text = "y=sin(x*4)*abs(sin(x/2))*8"},
+    {Name = "Spiral Arena Enclosure", Text = "r=theta*5"},
+    {Name = "Square Wave Step Intercept", Text = "y=floor(sin(x/4))*5"},
+    {Name = "Star Burst Lines Custom", Text = "y=2x\ny=x\ny=0.5x\ny=-0.5x\ny=-x\ny=-2x\nx=0\ny=0"},
+    {Name = "Star Pattern Intricate Ten", Text = "r=15+cos(10*theta)*4"},
+    {Name = "Sun Flare Flare Array", Text = "r=12+abs(sin(12*theta))*6"},
+    {Name = "Symmetrical Double Parabolas", Text = "y=(x^2)/12\ny=-(x^2)/12"},
+    {Name = "Tan Wave Cascade Grid", Text = "y=tan(x/6)*4"},
+    {Name = "Tangent Interference Wall", Text = "y=tan(sin(x))*3"},
+    {Name = "Target Ring Inward Tiers", Text = "r=10\nr=20\nr=30"},
+    {Name = "Tight Coil Vortex Matrix", Text = "r=theta*1.2"},
+    {Name = "Trefoil Knot Array Polar", Text = "r=10+sin(3*theta)*10"},
+    {Name = "Trifolium Blossom Frame", Text = "r=18*abs(cos(3*theta))"},
+    {Name = "Triple Intercept Horizon", Text = "y=6\ny=0\y=-6"},
+    {Name = "Triple Ring Orbit Lattice", Text = "r=8\nr=16\nr=24"},
+    {Name = "Triple Wave Interlace Matrix", Text = "y=sin(x)*4\y=sin(x+1)*4\y=sin(x+2)*4"},
+    {Name = "Unstable Frequency Shift", Text = "y=sin(x^1.5)*5"},
+    {Name = "Unstable Orbit Polar Wiggle", Text = "r=15+sin(theta*6)*2"},
+    {Name = "Vertical Pillars Expanded Trio", Text = "x=8\nx=0\nx=-8"},
+    {Name = "Vortex Swirl Funnel Wall", Text = "r=sqrt(theta)*12"},
+    {Name = "Waveform Compression Node", Text = "y=sin(x/(abs(x)/4+1))*6"},
+    {Name = "Zigzag Amplitude Wave", Text = "y=abs(x%8-4)*2"}
+}
+table.sort(originalPresets, function(a, b) return a.Name < b.Name end)
 
 -- // --- [SECTION: EXPLICIT PRESET SELECTION OVERLAY] ---
 local EqPresetContainer = Instance.new("Frame")
-EqPresetContainer.Size = UDim2.new(0, 165, 0, 140)
+EqPresetContainer.Size = UDim2.new(0, 340, 0, 190)
 EqPresetContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 EqPresetContainer.BorderSizePixel = 0
 EqPresetContainer.Visible = false
@@ -1154,36 +1070,48 @@ EqPresetContainer.ZIndex = 25
 EqPresetContainer.Parent = ScreenGui
 Instance.new("UICorner", EqPresetContainer).CornerRadius = UDim.new(0, 4)
 
+local PresetSearchBar = Instance.new("TextBox")
+PresetSearchBar.Size = UDim2.new(1, -10, 0, 25)
+PresetSearchBar.Position = UDim2.new(0, 5, 0, 5)
+PresetSearchBar.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+PresetSearchBar.PlaceholderText = "🔍 Filter 100 expressions..."
+PresetSearchBar.Text = ""
+PresetSearchBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+PresetSearchBar.Font = Enum.Font.Gotham
+PresetSearchBar.TextSize = 12
+PresetSearchBar.ZIndex = 25
+PresetSearchBar.Parent = EqPresetContainer
+Instance.new("UICorner", PresetSearchBar).CornerRadius = UDim.new(0, 4)
+
 local EqPresetScroll = Instance.new("ScrollingFrame")
-EqPresetScroll.Size = UDim2.new(1, 0, 1, 0)
+EqPresetScroll.Size = UDim2.new(1, -10, 1, -40)
+EqPresetScroll.Position = UDim2.new(0, 5, 0, 35)
 EqPresetScroll.BackgroundTransparency = 1
 EqPresetScroll.ScrollBarThickness = 4
 EqPresetScroll.ZIndex = 25
 EqPresetScroll.Parent = EqPresetContainer
-local EqPresetLayout = Instance.new("UIListLayout", EqPresetScroll)
+
+local EqPresetLayout = Instance.new("UIGridLayout", EqPresetScroll)
+EqPresetLayout.CellSize = UDim2.new(0, 104, 0, 32)
+EqPresetLayout.CellPadding = UDim2.new(0, 6, 0, 6)
 EqPresetLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
-local presetLibrary = {
-    {Name = "Star Burst Lines", Text = "y=2x\ny=x\ny=0.5x\ny=-0.5x\ny=-x\ny=-2x\nx=0\ny=0"},
-    {Name = "Perfect Circle", Text = "r=20"},
-    {Name = "Sine Wave Lattice", Text = "y=sin(x/4)*8\ny=-sin(x/4)*8"},
-    {Name = "Spiral Arena", Text = "r=theta*5"},
-    {Name = "Butterfly Ring", Text = "r=12+sin(theta)*5"},
-    {Name = "Axis Cross Only", Text = "x=0\ny=0"}
-}
-
-for i, preset in ipairs(presetLibrary) do
+local presetButtons = {}
+for i, preset in ipairs(originalPresets) do
     local PBtn = Instance.new("TextButton")
-    PBtn.Size = UDim2.new(1, 0, 0, 25)
+    PBtn.Size = UDim2.new(1, 0, 1, 0)
     PBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
-    PBtn.BackgroundTransparency = (i % 2 == 0) and 0.5 or 0.7
-    PBtn.Text = "  " .. preset.Name
-    PBtn.TextColor3 = Color3.fromRGB(230, 230, 230)
-    PBtn.TextXAlignment = Enum.TextXAlignment.Left
+    PBtn.Text = preset.Name
+    PBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
     PBtn.Font = Enum.Font.Gotham
-    PBtn.TextSize = 11
+    PBtn.TextSize = 9
+    PBtn.TextWrapped = true
+    PBtn.LayoutOrder = i
     PBtn.ZIndex = 25
     PBtn.Parent = EqPresetScroll
+    Instance.new("UICorner", PBtn).CornerRadius = UDim.new(0, 4)
+    
+    table.insert(presetButtons, {Button = PBtn, Data = preset})
     
     PBtn.MouseButton1Click:Connect(function()
         EqInput.Text = preset.Text
@@ -1192,15 +1120,34 @@ for i, preset in ipairs(presetLibrary) do
         if currentState.previewActive then refreshPreviewVisual(true) end
     end)
 end
-EqPresetScroll.CanvasSize = UDim2.new(0, 0, 0, #presetLibrary * 25)
 
-EqPresetMainBtn.MouseButton1Click:Connect(function()
-    EqPresetContainer.Visible = not EqPresetContainer.Visible
+local function updatePresetCanvas()
+    local visibleCount = 0
+    for _, item in ipairs(presetButtons) do
+        if item.Button.Visible then visibleCount = visibleCount + 1 end
+    end
+    local rows = math.ceil(visibleCount / 3)
+    EqPresetScroll.CanvasSize = UDim2.new(0, 0, 0, rows * 38)
+end
+updatePresetCanvas()
+
+PresetSearchBar:GetPropertyChangedSignal("Text"):Connect(function()
+    local query = string.lower(PresetSearchBar.Text)
+    for _, item in ipairs(presetButtons) do
+        if string.find(string.lower(item.Data.Name), query) then
+            item.Button.Visible = true
+        else
+            item.Button.Visible = false
+        end
+    end
+    updatePresetCanvas()
 end)
+
+EqPresetMainBtn.MouseButton1Click:Connect(function() EqPresetContainer.Visible = not EqPresetContainer.Visible end)
 
 RunService.RenderStepped:Connect(function()
     if EqPresetContainer.Visible and EqPresetMainBtn.Visible then
-        EqPresetContainer.Position = UDim2.new(0, EqPresetMainBtn.AbsolutePosition.X, 0, EqPresetMainBtn.AbsolutePosition.Y + EqPresetMainBtn.AbsoluteSize.Y + 32)
+        EqPresetContainer.Position = UDim2.new(0, EqPresetMainBtn.AbsolutePosition.X - 85, 0, EqPresetMainBtn.AbsolutePosition.Y + EqPresetMainBtn.AbsoluteSize.Y + 32)
     end
 end)
 
@@ -1240,14 +1187,11 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 MinimizeBtn.MouseButton1Click:Connect(function()
-    TitleBar.Visible = false ToggleBar.Visible = false ScrollFrame.Visible = false EqPresetContainer.Visible = false
+    TitleBar.Visible = false ToggleBar.Visible = false ScrollFrame.Visible = false EqPresetContainer.Visible = false DropdownContainer.Visible = false
     MainFrame.Size = UDim2.new(0, 50, 0, 50) ExpandBtn.Visible = true
 end)
 
-ExpandBtn.MouseButton1Click:Connect(function()
-    ExpandBtn.Visible = false TitleBar.Visible = true ToggleBar.Visible = true ScrollFrame.Visible = true
-    updateLayoutSize() 
-end)
+ExpandBtn.MouseButton1Click:Connect(function() ExpandBtn.Visible = false TitleBar.Visible = true ToggleBar.Visible = true ScrollFrame.Visible = true updateLayoutSize() end)
 
 CloseBtn.MouseButton1Click:Connect(function()
     if previewConnection then previewConnection:Disconnect() end
@@ -1256,6 +1200,4 @@ CloseBtn.MouseButton1Click:Connect(function()
     ScreenGui:Destroy()
 end)
 
--- Deployment Sequence
-TitleBar.Visible = true ToggleBar.Visible = true ScrollFrame.Visible = true DropdownContainer.Visible = false
-ExpandBtn.Visible = false updateLayoutSize()
+TitleBar.Visible = true ToggleBar.Visible = true ScrollFrame.Visible = true DropdownContainer.Visible = false ExpandBtn.Visible = false updateLayoutSize()
