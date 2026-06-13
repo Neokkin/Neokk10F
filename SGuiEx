@@ -1,0 +1,1261 @@
+-- // --- [SECTION: INITIALIZATION & GLOBALS] ---
+local coreGui = game:GetService("CoreGui")
+if coreGui:FindFirstChild("BuilderGUI") then coreGui.BuilderGUI:Destroy() end
+if coreGui:FindFirstChild("AutoAttackGUI") then coreGui.AutoAttackGUI:Destroy() end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+-- // --- [SECTION: STATE VARIABLES] ---
+local currentState = {
+    posX = 0, posY = 0, posZ = 0,
+    rotX = 0, rotY = 0, rotZ = 0,
+    rotDiff = 45,
+    posDiff = 1,
+    snapGrid = 0,      
+    snapAngle = 0,     
+    buildName = "Throne",
+    multi = 1,
+    previewActive = false,
+    
+    -- Combat & Automation States
+    attackEnabled = false,
+    attackInterval = 0.2,
+    parallelTriggers = 1,
+    hpValue = -1000000000,
+    autoFoodEnabled = true,
+    antiLagEnabled = false,
+    
+    -- Y-Lock Configuration State
+    yLockEnabled = false,
+    lockedYValue = 0,
+
+    -- Parametric Equation Configuration
+    equationBuildEnabled = false,
+    equationText = "y=2x\ny=x\ny=0.5x\ny=-0.5x\ny=-x\ny=-2x\nx=0\ny=0" 
+}
+
+-- Airwalk Subsystem State (Default OFF)
+local airwalkEnabled = false
+local noclipEnabled = false
+local airwalkY = 0
+local airwalkPart = nil
+local manualMovingUp = false
+local manualMovingDown = false
+
+local previewModel = nil
+local previewConnection = nil
+
+-- Alphabetized Build Options
+local buildOptions = {
+    "Bed", "Berry Farm", "Camp Fire", "Chair", "Corn Farm", "Fiber Farm", "Forge", 
+    "Grill", "Ladder", "Lantern", "Mounted Torch", "Placeable Torch", 
+    "Stone Battlements Wall", "Stone Fence", "Stone Fence Gate", "Stone Floor", 
+    "Stone Foundation", "Stone Half Wall", "Stone Low Wall", "Stone Roof", 
+    "Stone Sloped Roof", "Stone Sloped Roof Corner", "Stone Stairs", "Stone Tower", 
+    "Stone Triangle Wall", "Stone Wall", "Stone Wall Door", "Stone Wall Glass Window", 
+    "Stone Wall Open Window", "Stone Wall Window", "Table", "Throne", "Well", 
+    "Wood Battlements Wall", "Wood Fence", "Wood Fence Gate", "Wood Floor", 
+    "Wood Foundation", "Wood Half Wall", "Wood Low Wall", "Wood Roof", 
+    "Wood Sloped Roof", "Wood Stairs", "Wood Tower", "Wood Triangle Wall", 
+    "Wood Wall", "Wood Wall Door", "Wood Wall Glass Window", "Wood Wall Open Window", 
+    "Wood Wall Window"
+}
+
+-- // --- [SECTION: MAIN UI CONSTRUCTION] ---
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BuilderGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = coreGui
+
+-- Main Base Frame (Height expanded to 390 to accommodate the multi-line equation workspace)
+local MainFrame = Instance.new("Frame")
+MainFrame.Size = UDim2.new(0, 540, 0, 390)
+MainFrame.Position = UDim2.new(0.5, -270, 0.5, -195)
+MainFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+MainFrame.BackgroundTransparency = 0.2
+MainFrame.BorderSizePixel = 0
+MainFrame.ClipsDescendants = false
+MainFrame.Parent = ScreenGui
+local UICorner = Instance.new("UICorner", MainFrame)
+UICorner.CornerRadius = UDim.new(0, 8)
+
+-- Title Bar
+local TitleBar = Instance.new("Frame")
+TitleBar.Size = UDim2.new(1, 0, 0, 30)
+TitleBar.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+TitleBar.BackgroundTransparency = 0.2
+TitleBar.BorderSizePixel = 0
+TitleBar.Parent = MainFrame
+local TitleCorner = Instance.new("UICorner", TitleBar)
+TitleCorner.CornerRadius = UDim.new(0, 8)
+local CornerHide = Instance.new("Frame", TitleBar)
+CornerHide.Size = UDim2.new(1, 0, 0, 8)
+CornerHide.Position = UDim2.new(0, 0, 1, -8)
+CornerHide.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+CornerHide.BackgroundTransparency = 0.2
+CornerHide.BorderSizePixel = 0
+
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -60, 1, 0)
+TitleLabel.Position = UDim2.new(0, 10, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "Build & Combat Controller v6.0"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+TitleLabel.TextXAlignment = Enum.TextXAlignment.Left
+TitleLabel.Font = Enum.Font.GothamBold
+TitleLabel.TextSize = 14
+TitleLabel.Parent = TitleBar
+
+local MinimizeBtn = Instance.new("TextButton")
+MinimizeBtn.Size = UDim2.new(0, 20, 0, 20)
+MinimizeBtn.Position = UDim2.new(1, -50, 0, 5)
+MinimizeBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+MinimizeBtn.Text = "-"
+MinimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+MinimizeBtn.Font = Enum.Font.GothamBold
+MinimizeBtn.Parent = TitleBar
+Instance.new("UICorner", MinimizeBtn).CornerRadius = UDim.new(0, 4)
+
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Size = UDim2.new(0, 20, 0, 20)
+CloseBtn.Position = UDim2.new(1, -25, 0, 5)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Parent = TitleBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 4)
+
+-- Cluster Visibility Toggle Bar
+local ToggleBar = Instance.new("Frame")
+ToggleBar.Size = UDim2.new(1, -20, 0, 26)
+ToggleBar.Position = UDim2.new(0, 10, 0, 36)
+ToggleBar.BackgroundTransparency = 1
+ToggleBar.Parent = MainFrame
+local ToggleLayout = Instance.new("UIListLayout", ToggleBar)
+ToggleLayout.FillDirection = Enum.FillDirection.Horizontal
+ToggleLayout.Padding = UDim.new(0, 6)
+
+-- Minimization Icon Button
+local ExpandBtn = Instance.new("TextButton")
+ExpandBtn.Size = UDim2.new(1, 0, 1, 0)
+ExpandBtn.BackgroundColor3 = Color3.fromRGB(45, 125, 220)
+ExpandBtn.Text = "🛠️"
+ExpandBtn.TextSize = 22
+ExpandBtn.TextColor3 = Color3.new(1, 1, 1)
+ExpandBtn.Font = Enum.Font.GothamBold
+ExpandBtn.Visible = false
+ExpandBtn.Parent = MainFrame
+local ExpandCorner = Instance.new("UICorner", ExpandBtn)
+ExpandCorner.CornerRadius = UDim.new(0, 8)
+
+-- Scroll Frame Layout Panel
+local ScrollFrame = Instance.new("ScrollingFrame")
+ScrollFrame.Size = UDim2.new(1, 0, 1, -68)
+ScrollFrame.Position = UDim2.new(0, 0, 0, 68)
+ScrollFrame.BackgroundTransparency = 1
+ScrollFrame.ScrollBarThickness = 0
+ScrollFrame.Parent = MainFrame
+
+local UIListLayout = Instance.new("UIListLayout", ScrollFrame)
+UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+UIListLayout.FillDirection = Enum.FillDirection.Horizontal
+UIListLayout.Padding = UDim.new(0, 12)
+
+local UIPadding = Instance.new("UIPadding", ScrollFrame)
+UIPadding.PaddingTop = UDim.new(0, 5)
+UIPadding.PaddingBottom = UDim.new(0, 5)
+UIPadding.PaddingLeft = UDim.new(0, 10)
+UIPadding.PaddingRight = UDim.new(0, 10)
+
+-- Layout Columns
+local ModifierColumn = Instance.new("Frame", ScrollFrame)
+ModifierColumn.Size = UDim2.new(0, 150, 1, 0) ModifierColumn.BackgroundTransparency = 1
+local L4 = Instance.new("UIListLayout", ModifierColumn) L4.Padding = UDim.new(0, 5)
+
+local CombatColumn = Instance.new("Frame", ScrollFrame)
+CombatColumn.Size = UDim2.new(0, 175, 1, 0) CombatColumn.BackgroundTransparency = 1
+local L5 = Instance.new("UIListLayout", CombatColumn) L5.Padding = UDim.new(0, 5)
+
+local AdvancedColumn = Instance.new("Frame", ScrollFrame)
+AdvancedColumn.Size = UDim2.new(0, 165, 1, 0) AdvancedColumn.BackgroundTransparency = 1
+local L6 = Instance.new("UIListLayout", AdvancedColumn) L6.Padding = UDim.new(0, 5)
+
+local layoutOrder = 0
+local function nextOrder()
+    layoutOrder = layoutOrder + 1
+    return layoutOrder
+end
+
+local function createTextBox(placeholder, parent)
+    local box = Instance.new("TextBox")
+    box.Size = UDim2.new(1, 0, 0, 28)
+    box.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+    box.PlaceholderText = placeholder
+    box.Text = ""
+    box.TextColor3 = Color3.fromRGB(255, 255, 255)
+    box.Font = Enum.Font.Gotham
+    box.TextSize = 13
+    box.LayoutOrder = nextOrder()
+    box.Parent = parent
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+    return box
+end
+
+local function createButton(text, parent, halfSize)
+    local btn = Instance.new("TextButton")
+    btn.Size = halfSize and UDim2.new(0.48, 0, 0, 28) or UDim2.new(1, 0, 0, 28)
+    btn.BackgroundColor3 = Color3.fromRGB(60, 120, 200)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 13
+    btn.LayoutOrder = nextOrder()
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    return btn
+end
+
+local function createLabel(text, parent)
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 18)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = text
+    lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.TextSize = 13
+    lbl.LayoutOrder = nextOrder()
+    lbl.Parent = parent
+    return lbl
+end
+
+local function setupHoldButton(button, actionCallback)
+    local isHolding = false
+    button.MouseButton1Down:Connect(function()
+        isHolding = true
+        actionCallback()
+        task.wait(0.7)
+        while isHolding do
+            actionCallback()
+            task.wait(0.04)
+        end
+    end)
+    button.InputEnded:Connect(function(inputObj)
+        if inputObj.UserInputType == Enum.UserInputType.MouseButton1 or inputObj.UserInputType == Enum.UserInputType.Touch then
+            isHolding = false
+        end
+    end)
+end
+
+local refreshPreviewVisual
+
+-- Circular Mobile Button
+local MobileAttackToggle = Instance.new("TextButton")
+MobileAttackToggle.Name = "ImmovableAttackToggle"
+MobileAttackToggle.Size = UDim2.new(0, 65, 0, 65)
+MobileAttackToggle.Position = UDim2.new(1, -225, 1, -145) 
+MobileAttackToggle.BackgroundColor3 = Color3.fromRGB(170, 0, 0)
+MobileAttackToggle.Text = "OFF"
+MobileAttackToggle.TextColor3 = Color3.new(1, 1, 1)
+MobileAttackToggle.Font = Enum.Font.GothamBold
+MobileAttackToggle.TextSize = 16
+MobileAttackToggle.ZIndex = 10
+MobileAttackToggle.Parent = ScreenGui
+Instance.new("UICorner", MobileAttackToggle).CornerRadius = UDim.new(1, 0)
+
+-- Immovable Hotbar HUD System
+local HotbarHUD = Instance.new("Frame")
+HotbarHUD.Name = "HotbarHUD"
+HotbarHUD.Size = UDim2.new(0, 440, 0, 85)
+HotbarHUD.Position = UDim2.new(0.5, -220, 1, -165)
+HotbarHUD.BackgroundTransparency = 1
+HotbarHUD.Visible = true
+HotbarHUD.Parent = ScreenGui
+
+local UpperRow = Instance.new("Frame")
+UpperRow.Size = UDim2.new(1, 0, 0, 32)
+UpperRow.BackgroundTransparency = 1
+UpperRow.Parent = HotbarHUD
+
+local UpperLayout = Instance.new("UIListLayout", UpperRow)
+UpperLayout.FillDirection = Enum.FillDirection.Horizontal
+UpperLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+UpperLayout.Padding = UDim.new(0, 6)
+
+local BuildBtn = createButton("Build (B)", UpperRow)
+BuildBtn.Size = UDim2.new(0, 80, 1, 0)
+BuildBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+
+local DropdownMainBtn = createButton("Build: " .. currentState.buildName .. " ▼", UpperRow)
+DropdownMainBtn.Size = UDim2.new(0, 170, 1, 0)
+DropdownMainBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+
+local ShowBtn = createButton("Preview (P)", UpperRow)
+ShowBtn.Size = UDim2.new(0, 90, 1, 0)
+
+local YLockBtn = createButton("Y Lock", UpperRow)
+YLockBtn.Size = UDim2.new(0, 70, 1, 0)
+YLockBtn.BackgroundColor3 = Color3.fromRGB(120, 65, 65)
+
+local LowerRow = Instance.new("Frame")
+LowerRow.Size = UDim2.new(1, 0, 0, 45)
+LowerRow.Position = UDim2.new(0, 0, 0, 38)
+LowerRow.BackgroundTransparency = 1
+LowerRow.Parent = HotbarHUD
+
+local LowerLayout = Instance.new("UIListLayout", LowerRow)
+LowerLayout.FillDirection = Enum.FillDirection.Horizontal
+LowerLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+LowerLayout.Padding = UDim.new(0, 6)
+
+local hotbarMode = "Rotation"
+
+local function createCircularHotbarButton()
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 45, 0, 45)
+    btn.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+    btn.BackgroundTransparency = 0.2
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 11
+    btn.Parent = LowerRow
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+    return btn
+end
+
+local HotbarButtons = {}
+for i = 1, 8 do
+    HotbarButtons[i] = createCircularHotbarButton()
+end
+
+HotbarButtons[1].BackgroundColor3 = Color3.fromRGB(65, 100, 165)
+HotbarButtons[8].BackgroundColor3 = Color3.fromRGB(135, 55, 55)
+
+local function updateHotbarButtonsDisplay()
+    if hotbarMode == "Rotation" then
+        HotbarButtons[1].Text = "ROT"
+        HotbarButtons[2].Text = "Tilt+"
+        HotbarButtons[3].Text = "Tilt-"
+        HotbarButtons[4].Text = "Turn+"
+        HotbarButtons[5].Text = "Turn-"
+        HotbarButtons[6].Text = "Roll+"
+        HotbarButtons[7].Text = "Roll-"
+        HotbarButtons[8].Text = "Rst R"
+    else
+        HotbarButtons[1].Text = "POS"
+        HotbarButtons[2].Text = "Right"
+        HotbarButtons[3].Text = "Left"
+        HotbarButtons[4].Text = "Up"
+        HotbarButtons[5].Text = "Down"
+        HotbarButtons[6].Text = "Back"
+        HotbarButtons[7].Text = "Front"
+        HotbarButtons[8].Text = "Rst P"
+    end
+end
+updateHotbarButtonsDisplay()
+
+HotbarButtons[1].MouseButton1Click:Connect(function()
+    if hotbarMode == "Rotation" then hotbarMode = "Position" else hotbarMode = "Rotation" end
+    updateHotbarButtonsDisplay()
+end)
+
+HotbarButtons[8].MouseButton1Click:Connect(function()
+    if hotbarMode == "Rotation" then
+        currentState.rotX, currentState.rotY, currentState.rotZ = 0, 0, 0
+    else
+        currentState.posX, currentState.posY, currentState.posZ = 0, 0, 0
+    end
+end)
+
+setupHoldButton(HotbarButtons[2], function()
+    if hotbarMode == "Rotation" then currentState.rotX = currentState.rotX + currentState.rotDiff
+    else currentState.posX = currentState.posX + currentState.posDiff end
+end)
+setupHoldButton(HotbarButtons[3], function()
+    if hotbarMode == "Rotation" then currentState.rotX = currentState.rotX - currentState.rotDiff
+    else currentState.posX = currentState.posX - currentState.posDiff end
+end)
+setupHoldButton(HotbarButtons[4], function()
+    if hotbarMode == "Rotation" then currentState.rotY = currentState.rotY + currentState.rotDiff
+    else currentState.posX = currentState.posX + currentState.posDiff end
+end)
+setupHoldButton(HotbarButtons[5], function()
+    if hotbarMode == "Rotation" then currentState.rotY = currentState.rotY - currentState.rotDiff
+    else currentState.posY = currentState.posY - currentState.posDiff end
+end)
+setupHoldButton(HotbarButtons[6], function()
+    if hotbarMode == "Rotation" then currentState.rotZ = currentState.rotZ + currentState.rotDiff
+    else currentState.posZ = currentState.posZ + currentState.posDiff end
+end)
+setupHoldButton(HotbarButtons[7], function()
+    if hotbarMode == "Rotation" then currentState.rotZ = currentState.rotZ - currentState.rotDiff
+    else currentState.posZ = currentState.posZ - currentState.posDiff end
+end)
+
+local DropdownContainer = Instance.new("Frame")
+DropdownContainer.Size = UDim2.new(0, 170, 0, 130)
+DropdownContainer.Position = UDim2.new(0.5, -85, 0, -135)
+DropdownContainer.BackgroundTransparency = 1
+DropdownContainer.Visible = false
+DropdownContainer.ZIndex = 15
+DropdownContainer.Parent = HotbarHUD
+
+local SearchBar = Instance.new("TextBox")
+SearchBar.Size = UDim2.new(1, 0, 0, 25)
+SearchBar.BackgroundColor3 = Color3.fromRGB(40, 40, 45)
+SearchBar.BackgroundTransparency = 0.2
+SearchBar.PlaceholderText = "🔍 Search object..."
+SearchBar.Text = ""
+SearchBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+SearchBar.Font = Enum.Font.Gotham
+SearchBar.TextSize = 12
+SearchBar.ZIndex = 15
+SearchBar.Parent = DropdownContainer
+Instance.new("UICorner", SearchBar).CornerRadius = UDim.new(0, 4)
+
+local DropdownScroll = Instance.new("ScrollingFrame")
+DropdownScroll.Size = UDim2.new(1, 0, 1, -28)
+DropdownScroll.Position = UDim2.new(0, 0, 0, 28)
+DropdownScroll.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+DropdownScroll.BackgroundTransparency = 0.2
+DropdownScroll.BorderSizePixel = 0
+DropdownScroll.ScrollBarThickness = 4
+DropdownScroll.CanvasSize = UDim2.new(0, 0, 0, #buildOptions * 25)
+DropdownScroll.ZIndex = 15
+DropdownScroll.Parent = DropdownContainer
+Instance.new("UICorner", DropdownScroll).CornerRadius = UDim.new(0, 4)
+
+local DropdownLayout = Instance.new("UIListLayout", DropdownScroll)
+DropdownLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local optionButtons = {}
+for i, option in ipairs(buildOptions) do
+    local OptionBtn = Instance.new("TextButton")
+    OptionBtn.Size = UDim2.new(1, 0, 0, 25)
+    OptionBtn.BackgroundTransparency = (i % 2 == 0) and 0.8 or 0.9
+    OptionBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+    OptionBtn.Text = "  " .. option
+    OptionBtn.TextColor3 = Color3.fromRGB(220, 220, 220)
+    OptionBtn.TextXAlignment = Enum.TextXAlignment.Left
+    OptionBtn.Font = Enum.Font.Gotham
+    OptionBtn.TextSize = 12
+    OptionBtn.LayoutOrder = i
+    OptionBtn.ZIndex = 15
+    OptionBtn.Parent = DropdownScroll
+    
+    table.insert(optionButtons, {Button = OptionBtn, Name = option})
+    
+    OptionBtn.MouseButton1Click:Connect(function()
+        currentState.buildName = option
+        DropdownMainBtn.Text = "Build: " .. option .. " ▼"
+        DropdownContainer.Visible = false
+        if currentState.previewActive then refreshPreviewVisual(true) end
+    end)
+end
+
+SearchBar:GetPropertyChangedSignal("Text"):Connect(function()
+    local searchPattern = string.lower(SearchBar.Text)
+    local visibleCount = 0
+    for _, item in ipairs(optionButtons) do
+        if string.find(string.lower(item.Name), searchPattern) then
+            item.Button.Visible = true
+            visibleCount = visibleCount + 1
+        else
+            item.Button.Visible = false
+        end
+    end
+    DropdownScroll.CanvasSize = UDim2.new(0, 0, 0, visibleCount * 25)
+end)
+
+DropdownMainBtn.MouseButton1Click:Connect(function() DropdownContainer.Visible = not DropdownContainer.Visible end)
+
+-- === COLUMN BUTTON POPULATION ===
+createLabel("⚙️ Modifiers", ModifierColumn)
+local MultiInput = createTextBox("Multiplier (Def: 1)", ModifierColumn)
+
+local AirwalkGuiToggleBtn = createButton("Airwalk Gui", ModifierColumn)
+AirwalkGuiToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+
+local AutoFoodToggleBtn = createButton("Auto Food", ModifierColumn)
+AutoFoodToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+
+local AntiLagToggleBtn = createButton("Anti Lag: OFF", ModifierColumn)
+AntiLagToggleBtn.BackgroundColor3 = Color3.fromRGB(120, 65, 65)
+
+local BuildToolsToggleBtn = createButton("Build Tools", ModifierColumn)
+BuildToolsToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+
+local ItemsBtn = createButton("Items", ModifierColumn)
+ItemsBtn.BackgroundColor3 = Color3.fromRGB(142, 68, 173)
+
+createLabel("⚔️ Combat / Vitals", CombatColumn)
+
+local HpRow = Instance.new("Frame")
+HpRow.Size = UDim2.new(1, 0, 0, 28)
+HpRow.BackgroundTransparency = 1
+HpRow.LayoutOrder = nextOrder()
+HpRow.Parent = CombatColumn
+
+local HpButton = createButton("HP", HpRow, true)
+local HpBox = createTextBox("1000000000", HpRow)
+HpBox.Size = UDim2.new(0.48, 0, 1, 0)
+HpBox.Position = UDim2.new(0.52, 0, 0, 0)
+HpBox.Text = tostring(math.abs(currentState.hpValue))
+
+local CombatConfigRow = Instance.new("Frame")
+CombatConfigRow.Size = UDim2.new(1, 0, 0, 28)
+CombatConfigRow.BackgroundTransparency = 1
+CombatConfigRow.LayoutOrder = nextOrder()
+CombatConfigRow.Parent = CombatColumn
+
+local IntervalBox = createTextBox("Secs (0.2)", CombatConfigRow)
+IntervalBox.Size = UDim2.new(0.48, 0, 1, 0)
+IntervalBox.Text = tostring(currentState.attackInterval)
+
+local ParallelBox = createTextBox("Loops (1)", CombatConfigRow)
+ParallelBox.Size = UDim2.new(0.48, 0, 1, 0)
+ParallelBox.Position = UDim2.new(0.52, 0, 0, 0)
+ParallelBox.Text = tostring(currentState.parallelTriggers)
+
+local ShowAttackBtn = createButton("Hide Attack Button", CombatColumn)
+ShowAttackBtn.BackgroundColor3 = Color3.fromRGB(70, 80, 95)
+
+-- === ADVANCED COLUMN POPULATION ===
+createLabel("🗑️ Wipe Tools", AdvancedColumn)
+local DeleteInput = createTextBox("Type 'Delete'...", AdvancedColumn)
+local DeleteBtn = createButton("Delete all build", AdvancedColumn)
+DeleteBtn.BackgroundColor3 = Color3.fromRGB(150, 45, 45)
+
+createLabel("📐 Expressions", AdvancedColumn)
+
+local EqToggleBtn = createButton("Equation Build: OFF", AdvancedColumn)
+EqToggleBtn.BackgroundColor3 = Color3.fromRGB(120, 65, 65)
+
+-- Preset Selector Dropdown Initialization
+local EqPresetMainBtn = createButton("Presets ▼", AdvancedColumn)
+EqPresetMainBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
+
+-- Large Multi-Line Equation Input Setup
+local EqInput = Instance.new("TextBox")
+EqInput.Size = UDim2.new(1, 0, 0, 110) -- Expanded viewport footprint
+EqInput.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+EqInput.Text = currentState.equationText
+EqInput.TextColor3 = Color3.fromRGB(255, 255, 255)
+EqInput.Font = Enum.Font.Gotham
+EqInput.TextSize = 12
+EqInput.TextXAlignment = Enum.TextXAlignment.Left
+EqInput.TextYAlignment = Enum.TextYAlignment.Top
+EqInput.MultiLine = true
+EqInput.ClearTextOnFocus = false -- Kept contents intact during selection adjustments
+EqInput.LayoutOrder = nextOrder()
+EqInput.Parent = AdvancedColumn
+Instance.new("UICorner", EqInput).CornerRadius = UDim.new(0, 4)
+
+-- Replaced standard execution trigger with a structural safety clear button
+local ClearEqBtn = createButton("Clear Equation", AdvancedColumn)
+ClearEqBtn.BackgroundColor3 = Color3.fromRGB(150, 45, 45)
+
+local clusters = {
+    {Frame = ModifierColumn, Name = "Modifiers", Wide = 150},
+    {Frame = CombatColumn, Name = "Combat", Wide = 175},
+    {Frame = AdvancedColumn, Name = "Advanced", Wide = 165}
+}
+
+local function updateLayoutSize()
+    if ExpandBtn.Visible then return end
+    local calculatedWidth = 20
+    local activeColumns = 0
+    for _, item in ipairs(clusters) do
+        if item.Frame.Visible then
+            calculatedWidth = calculatedWidth + item.Wide
+            activeColumns = activeColumns + 1
+        end
+    end
+    if activeColumns > 0 then
+        calculatedWidth = calculatedWidth + ((activeColumns - 1) * 12)
+    else
+        calculatedWidth = 220
+    end
+    if calculatedWidth < 365 then calculatedWidth = 365 end 
+    MainFrame.Size = UDim2.new(0, calculatedWidth, 0, 390)
+    ScrollFrame.CanvasSize = UDim2.new(0, calculatedWidth - 20, 0, 320)
+end
+
+for _, item in ipairs(clusters) do
+    local Tgl = Instance.new("TextButton")
+    Tgl.Size = UDim2.new(0, 85, 1, 0)
+    Tgl.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+    Tgl.Text = item.Name
+    Tgl.TextColor3 = Color3.new(1, 1, 1)
+    Tgl.Font = Enum.Font.GothamBold
+    Tgl.TextSize = 11
+    Tgl.Parent = ToggleBar
+    Instance.new("UICorner", Tgl).CornerRadius = UDim.new(0, 4)
+    
+    Tgl.MouseButton1Click:Connect(function()
+        item.Frame.Visible = not item.Frame.Visible
+        Tgl.BackgroundColor3 = item.Frame.Visible and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(70, 70, 75)
+        updateLayoutSize()
+    end)
+end
+
+BuildToolsToggleBtn.MouseButton1Click:Connect(function()
+    HotbarHUD.Visible = not HotbarHUD.Visible
+    BuildToolsToggleBtn.BackgroundColor3 = HotbarHUD.Visible and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(65, 115, 115)
+    if not HotbarHUD.Visible then DropdownContainer.Visible = false end
+end)
+
+
+-- // --- [SECTION: AIRWALK / PHASE LOGIC] ---
+local AirwalkContainer = Instance.new("Frame")
+AirwalkContainer.Name = "AirwalkHUD"
+AirwalkContainer.Size = UDim2.new(0, 54, 0, 210)
+AirwalkContainer.Position = UDim2.new(1, -100, 0.5, -105)
+AirwalkContainer.BackgroundColor3 = Color3.fromRGB(25, 25, 30)
+AirwalkContainer.BackgroundTransparency = 0.2
+AirwalkContainer.BorderSizePixel = 0
+AirwalkContainer.Visible = true
+AirwalkContainer.Parent = ScreenGui
+Instance.new("UICorner", AirwalkContainer).CornerRadius = UDim.new(0, 8)
+
+local AirwalkLayout = Instance.new("UIListLayout", AirwalkContainer)
+AirwalkLayout.FillDirection = Enum.FillDirection.Vertical
+AirwalkLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+AirwalkLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+AirwalkLayout.Padding = UDim.new(0, 8)
+AirwalkLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local function createCircularHUDButton(symbol)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 42, 0, 42)
+    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    btn.Text = symbol
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 16
+    btn.Parent = AirwalkContainer
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+    return btn
+end
+
+local AirUpBtn = createCircularHUDButton("▲")
+AirUpBtn.LayoutOrder = 1
+
+local AirToggleBtn = createCircularHUDButton("●")
+AirToggleBtn.LayoutOrder = 2
+AirToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50) 
+
+local AirPhaseBtn = createCircularHUDButton("Ø")
+AirPhaseBtn.LayoutOrder = 3
+AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+
+local AirDownBtn = createCircularHUDButton("▼")
+AirDownBtn.LayoutOrder = 4
+
+AirwalkGuiToggleBtn.MouseButton1Click:Connect(function()
+    AirwalkContainer.Visible = not AirwalkContainer.Visible
+    AirwalkGuiToggleBtn.BackgroundColor3 = AirwalkContainer.Visible and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(75, 65, 120)
+end)
+
+AirUpBtn.MouseButton1Down:Connect(function() manualMovingUp = true end)
+AirUpBtn.InputEnded:Connect(function(io)
+    if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then
+        manualMovingUp = false
+    end
+end)
+
+local function setCharacterCollision(canCollide)
+    if not player.Character then return end
+    for _, part in ipairs(player.Character:GetDescendants()) do
+        if part:IsA("BasePart") then
+            part.CanCollide = canCollide
+        end
+    end
+end
+
+AirDownBtn.MouseButton1Down:Connect(function() manualMovingDown = true end)
+AirDownBtn.InputEnded:Connect(function(io)
+    if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then
+        manualMovingDown = false
+    end
+end)
+
+AirToggleBtn.MouseButton1Click:Connect(function()
+    airwalkEnabled = not airwalkEnabled
+    if airwalkEnabled then
+        AirToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+            airwalkY = player.Character.HumanoidRootPart.Position.Y - 3.5
+        end
+    else
+        AirToggleBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        manualMovingUp = false
+        manualMovingDown = false
+        noclipEnabled = false
+        AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        setCharacterCollision(true) 
+        if airwalkPart then airwalkPart:Destroy() airwalkPart = nil end
+    end
+end)
+
+AirPhaseBtn.MouseButton1Click:Connect(function()
+    if not airwalkEnabled then return end 
+    noclipEnabled = not noclipEnabled
+    if noclipEnabled then
+        AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(142, 68, 173) 
+    else
+        AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+        setCharacterCollision(true) 
+    end
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+    if airwalkEnabled and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        local rootPart = player.Character.HumanoidRootPart
+        local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+        local currentFeetY = rootPart.Position.Y - 3.5
+        
+        if airwalkY == 0 then airwalkY = currentFeetY end
+        
+        if humanoid then
+            local speed = 30 
+            if manualMovingUp then
+                local deltaMove = speed * dt
+                airwalkY = airwalkY + deltaMove
+                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, deltaMove, 0)
+            elseif manualMovingDown then
+                local deltaMove = speed * dt
+                airwalkY = airwalkY - deltaMove
+                rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -deltaMove, 0)
+            elseif humanoid.Jump or UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+                airwalkY = airwalkY + (humanoid.JumpPower * dt)
+            elseif humanoid.FloorMaterial ~= Enum.Material.Air and humanoid.FloorMaterial ~= Enum.Material.Glass and not noclipEnabled then
+                airwalkY = currentFeetY
+            elseif currentFeetY > airwalkY + 1.5 and not noclipEnabled then
+                airwalkY = currentFeetY
+            end
+        end
+        
+        if noclipEnabled and player.Character then
+            setCharacterCollision(false)
+            rootPart.Velocity = Vector3.new(rootPart.Velocity.X, 0, rootPart.Velocity.Z)
+            rootPart.CFrame = CFrame.new(rootPart.Position.X, airwalkY + 3.5, rootPart.Position.Z) * rootPart.CFrame.Rotation
+        end
+        
+        if not airwalkPart or not airwalkPart.Parent then
+            airwalkPart = Instance.new("Part")
+            airwalkPart.Name = "AirwalkBaseplate_V8"
+            airwalkPart.Size = Vector3.new(16, 1, 16)
+            airwalkPart.Transparency = 1
+            airwalkPart.Anchored = true
+            airwalkPart.CanCollide = true
+            airwalkPart.Material = Enum.Material.Glass 
+            airwalkPart.Parent = workspace
+        end
+        airwalkPart.CFrame = CFrame.new(rootPart.Position.X, airwalkY, rootPart.Position.Z)
+    end
+end)
+
+
+-- // --- [SECTION: AUTO-FOOD ENGINE] ---
+AutoFoodToggleBtn.MouseButton1Click:Connect(function()
+    currentState.autoFoodEnabled = not currentState.autoFoodEnabled
+    AutoFoodToggleBtn.BackgroundColor3 = currentState.autoFoodEnabled and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(120, 65, 65)
+end)
+
+task.spawn(function()
+    while true do
+        if currentState.autoFoodEnabled then
+            pcall(function()
+                local useConsumableRemote = ReplicatedStorage:WaitForChild("UseConsumable")
+                useConsumableRemote:FireServer("Cooked Meat")
+                useConsumableRemote:FireServer("Water")
+            end)
+        end
+        task.wait(60) 
+    end
+end)
+
+
+-- // --- [SECTION: ANTI-LAG ENGINE] ---
+AntiLagToggleBtn.MouseButton1Click:Connect(function()
+    currentState.antiLagEnabled = not currentState.antiLagEnabled
+    AntiLagToggleBtn.Text = currentState.antiLagEnabled and "Anti Lag: ON" or "Anti Lag: OFF"
+    AntiLagToggleBtn.BackgroundColor3 = currentState.antiLagEnabled and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(120, 65, 65)
+end)
+
+RunService.Heartbeat:Connect(function()
+    if currentState.antiLagEnabled then
+        pcall(function()
+            if workspace:FindFirstChild("Resources") and workspace.Resources:FindFirstChild("Collectables") then
+                workspace.Resources.Collectables:ClearAllChildren()
+            end
+            if workspace:FindFirstChild("Map") then
+                if workspace.Map:FindFirstChild("Large Bushes") then 
+                    workspace.Map["Large Bushes"]:ClearAllChildren() 
+                end
+                if workspace.Map:FindFirstChild("Ferns/Bushes") then 
+                    workspace.Map["Ferns/Bushes"]:ClearAllChildren() 
+                end
+            end
+            if workspace:FindFirstChild("DamageIndicatorEffect") then
+                workspace.DamageIndicatorEffect:ClearAllChildren()
+            end
+        end)
+    end
+end)
+
+
+-- // --- [SECTION: ADVANCED MULTI-LINE COMPILER ENGINE] ---
+local function snap(value, step)
+    if step == 0 then return value end
+    return math.round(value / step) * step
+end
+
+local function getTargetCFrame()
+    if not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then return CFrame.new() end
+    local root = player.Character.HumanoidRootPart
+    local baseCFrame = root.CFrame * CFrame.new(0, 0, -20)
+    
+    if currentState.yLockEnabled then
+        baseCFrame = CFrame.new(baseCFrame.X, currentState.lockedYValue, baseCFrame.Z) * baseCFrame.Rotation
+    else
+        currentState.lockedYValue = baseCFrame.Y
+    end
+    
+    local finalX = snap(currentState.posX, currentState.snapGrid)
+    local finalY = snap(currentState.posY, currentState.snapGrid)
+    local finalZ = snap(currentState.posZ, currentState.snapGrid)
+    
+    local finalRotX = snap(currentState.rotX, currentState.snapAngle)
+    local finalRotY = snap(currentState.rotY, currentState.snapAngle)
+    local finalRotZ = snap(currentState.rotZ, currentState.snapAngle)
+    
+    return baseCFrame * CFrame.new(finalX, finalY, finalZ) * CFrame.Angles(math.rad(finalRotX), math.rad(finalRotY), math.rad(finalRotZ))
+end
+
+-- Completely rewritten generation pipeline to support multi-expression parsing vectors
+local function getEquationCFrames()
+    local cframes = {}
+    local totalObjects = math.max(1, currentState.multi)
+    local baseCF = getTargetCFrame()
+    
+    -- Split expression workspace safely by newlines
+    local equationsList = string.split(currentState.equationText, "\n")
+    
+    for _, rawEquation in ipairs(equationsList) do
+        -- Complete space sanitization & token alignment parsing
+        local line = string.lower(string.gsub(rawEquation, "%s+", ""))
+        
+        if line ~= "" then
+            local mode = "y"
+            local expr = line
+            
+            if string.sub(line, 1, 2) == "r=" then
+                mode = "r" expr = string.sub(line, 3)
+            elseif string.sub(line, 1, 2) == "x=" then
+                mode = "x" expr = string.sub(line, 3)
+            elseif string.sub(line, 1, 2) == "y=" then
+                mode = "y" expr = string.sub(line, 3)
+            end
+            
+            -- Regex string mutations to seamlessly inject math multiplication rules
+            expr = string.gsub(expr, "(%d)([%a%(])", "%1*%2") -- e.g., 2x -> 2*x
+            expr = string.gsub(expr, "^%-([%a%(])", "-1*%1")  -- e.g., -x -> -1*x
+            expr = string.gsub(expr, "([%+%-%*%/%%^%(])%-([%a%(])", "%1-1*%2") -- Handle operator chains
+            
+            local env = setmetatable({}, {__index = math})
+            
+            if mode == "r" then
+                local func = loadstring("return function(theta, i) return " .. expr .. " end")
+                if func then
+                    local success, generated = pcall(func)
+                    if success and type(generated) == "function" then
+                        setfenv(generated, env)
+                        for i = 1, totalObjects do
+                            local theta = ((i - 1) / totalObjects) * (math.pi * 2)
+                            env.theta = theta
+                            local success2, radius = pcall(generated, theta, i)
+                            if success2 and type(radius) == "number" then
+                                local xVal = math.cos(theta) * radius
+                                local yVal = math.sin(theta) * radius
+                                table.insert(cframes, baseCF * CFrame.new(xVal, yVal, 0))
+                            end
+                        end
+                    end
+                end
+            elseif mode == "x" then
+                -- Vertical Line Logic: X stays uniform while Y scales sequentially
+                local func = loadstring("return function(i) return " .. expr .. " end")
+                if func then
+                    local success, generated = pcall(func)
+                    if success and type(generated) == "function" then
+                        setfenv(generated, env)
+                        for i = 1, totalObjects do
+                            local success2, xVal = pcall(generated, i)
+                            if success2 and type(xVal) == "number" then
+                                local yVal = (i - 1) * 4
+                                table.insert(cframes, baseCF * CFrame.new(xVal, yVal, 0))
+                            end
+                        end
+                    end
+                end
+            elseif mode == "y" then
+                local func = loadstring("return function(x, i) return " .. expr .. " end")
+                if func then
+                    local success, generated = pcall(func)
+                    if success and type(generated) == "function" then
+                        setfenv(generated, env)
+                        for i = 1, totalObjects do
+                            local xVal = (i - 1) * 4
+                            local success2, yVal = pcall(generated, xVal, i)
+                            if success2 and type(yVal) == "number" then
+                                table.insert(cframes, baseCF * CFrame.new(xVal, yVal, 0))
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    if #cframes == 0 then return {baseCF} end
+    return cframes
+end
+
+YLockBtn.MouseButton1Click:Connect(function()
+    currentState.yLockEnabled = not currentState.yLockEnabled
+    if currentState.yLockEnabled then
+        YLockBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+        local initialCF = getTargetCFrame()
+        currentState.lockedYValue = initialCF.Y
+    else
+        YLockBtn.BackgroundColor3 = Color3.fromRGB(120, 65, 65)
+    end
+end)
+
+local function executeBuild()
+    local Remote = ReplicatedStorage:FindFirstChild("PlaceBuild")
+    if not Remote then return end
+    
+    if currentState.equationBuildEnabled then
+        local targetCFrames = getEquationCFrames()
+        for _, cf in ipairs(targetCFrames) do
+            task.spawn(function() Remote:InvokeServer(currentState.buildName, cf) end)
+        end
+    else
+        local buildCF = getTargetCFrame() 
+        for i = 1, currentState.multi do
+            task.spawn(function() Remote:InvokeServer(currentState.buildName, buildCF) end)
+        end
+    end
+end
+
+-- Owner Validation Wipe Hook Up
+DeleteBtn.MouseButton1Click:Connect(function()
+    if DeleteInput.Text == "Delete" then
+        if workspace:FindFirstChild("PlayerBuilds") then
+            for _, build in ipairs(workspace.PlayerBuilds:GetChildren()) do
+                if build:FindFirstChild("Owner") and (build.Owner.Value == player or build.Owner.Value == player.Name or build.Owner.Value == tostring(player.UserId)) then
+                    build:Destroy()
+                end
+            end
+        end
+        DeleteInput.Text = ""
+    end
+end)
+
+ItemsBtn.MouseButton1Click:Connect(function()
+    local DropRemote = ReplicatedStorage:WaitForChild("Drop")
+    local itemsToDrop = {
+        "Bandages", "Cooked Meat", "Stone", "Animal Hide", "Iron Ore", 
+        "Water", "Fiber", "Berries", "Raw Meat", "Wood", 
+        "Berry Seeds", "Fiber Seeds", "Corn Seeds", "Corn"
+    }
+    for _, itemName in ipairs(itemsToDrop) do
+        task.spawn(function() DropRemote:FireServer(itemName, -1000000000) end)
+    end
+end)
+
+HpBox.FocusLost:Connect(function()
+    local num = tonumber(HpBox.Text)
+    currentState.hpValue = num and -math.abs(num) or -1000000000
+    HpBox.Text = tostring(math.abs(currentState.hpValue))
+end)
+
+HpButton.MouseButton1Click:Connect(function()
+    pcall(function()
+        player:WaitForChild("PlayerGui"):WaitForChild("Vitals"):WaitForChild("FallDamageEvent"):FireServer(currentState.hpValue)
+    end)
+end)
+
+IntervalBox.FocusLost:Connect(function()
+    local num = tonumber(IntervalBox.Text)
+    currentState.attackInterval = (num and num > 0) and num or 0.2
+    IntervalBox.Text = tostring(currentState.attackInterval)
+end)
+
+ParallelBox.FocusLost:Connect(function()
+    local num = tonumber(ParallelBox.Text)
+    currentState.parallelTriggers = (num and num >= 1) and math.floor(num) or 1
+    ParallelBox.Text = tostring(currentState.parallelTriggers)
+end)
+
+local function toggleAttackEngine()
+    currentState.attackEnabled = not currentState.attackEnabled
+    MobileAttackToggle.Text = currentState.attackEnabled and "ON" or "OFF"
+    MobileAttackToggle.BackgroundColor3 = currentState.attackEnabled and Color3.fromRGB(0, 170, 0) or Color3.fromRGB(170, 0, 0)
+end
+MobileAttackToggle.MouseButton1Click:Connect(toggleAttackEngine)
+
+ShowAttackBtn.MouseButton1Click:Connect(function()
+    MobileAttackToggle.Visible = not MobileAttackToggle.Visible
+    ShowAttackBtn.Text = MobileAttackToggle.Visible and "Hide Attack Button" or "Show Attack Button"
+end)
+
+task.spawn(function()
+    while true do
+        if currentState.attackEnabled and player.Character then
+            local Tool = player.Character:FindFirstChildOfClass("Tool")
+            if Tool then
+                local AttackEvent = Tool:FindFirstChild("AttackEvent")
+                if AttackEvent and AttackEvent:IsA("RemoteEvent") then
+                    for i = 1, currentState.parallelTriggers do
+                        task.spawn(function() pcall(function() AttackEvent:FireServer() end) end)
+                    end
+                end
+            end
+        end
+        task.wait(currentState.attackInterval)
+    end
+end)
+
+refreshPreviewVisual = function(forceResetState)
+    if forceResetState then
+        if previewConnection then previewConnection:Disconnect() end
+        if previewModel then previewModel:Destroy() previewModel = nil end
+    else
+        currentState.previewActive = not currentState.previewActive
+    end
+    
+    ShowBtn.Text = currentState.previewActive and "Hide Prev." or "Preview (P)"
+    if not currentState.previewActive then
+        if previewConnection then previewConnection:Disconnect() end
+        if previewModel then previewModel:Destroy() previewModel = nil end
+        return
+    end
+    
+    local buildsFolder = ReplicatedStorage:FindFirstChild("Builds")
+    local targetTemplate = buildsFolder and buildsFolder:FindFirstChild(currentState.buildName)
+    if not targetTemplate then
+        currentState.previewActive = false
+        ShowBtn.Text = "Preview (P)"
+        return
+    end
+    
+    if currentState.equationBuildEnabled then
+        previewModel = Instance.new("Model")
+        previewModel.Name = "Local_EquationPreview"
+        
+        local cframes = getEquationCFrames()
+        for i = 1, #cframes do
+            local clone = targetTemplate:Clone()
+            for _, item in ipairs(clone:GetDescendants()) do
+                if item:IsA("BasePart") then
+                    item.Anchored = true item.CanCollide = false item.CastShadow = false item.Transparency = 0.5
+                end
+            end
+            if clone:IsA("Model") then clone:PivotTo(cframes[i]) else clone.CFrame = cframes[i] end
+            clone.Parent = previewModel
+        end
+        previewModel.Parent = workspace
+    else
+        previewModel = targetTemplate:Clone()
+        previewModel.Name = "Local_BuildPreview"
+        for _, item in ipairs(previewModel:GetDescendants()) do
+            if item:IsA("BasePart") then
+                item.Anchored = true item.CanCollide = false item.CastShadow = false item.Transparency = 0.4
+            end
+        end
+        previewModel.Parent = workspace
+    end
+    
+    if previewConnection then previewConnection:Disconnect() end
+    previewConnection = RunService.RenderStepped:Connect(function()
+        if not currentState.previewActive or not previewModel or not previewModel:IsDescendantOf(workspace) then return end
+        
+        if currentState.equationBuildEnabled then
+            local cframes = getEquationCFrames()
+            local children = previewModel:GetChildren()
+            
+            if #cframes ~= #children then
+                task.spawn(function() refreshPreviewVisual(true) end)
+                return
+            end
+            
+            for idx, cf in ipairs(cframes) do
+                local child = children[idx]
+                if child then
+                    if child:IsA("Model") then child:PivotTo(cf) else child.CFrame = cf end
+                end
+            end
+        else
+            previewModel:PivotTo(getTargetCFrame())
+        end
+    end)
+end
+
+BuildBtn.MouseButton1Click:Connect(executeBuild)
+
+EqToggleBtn.MouseButton1Click:Connect(function()
+    currentState.equationBuildEnabled = not currentState.equationBuildEnabled
+    EqToggleBtn.Text = currentState.equationBuildEnabled and "Equation Build: ON" or "Equation Build: OFF"
+    EqToggleBtn.BackgroundColor3 = currentState.equationBuildEnabled and Color3.fromRGB(46, 139, 87) or Color3.fromRGB(120, 65, 65)
+    if currentState.previewActive then refreshPreviewVisual(true) end
+end)
+
+EqInput:GetPropertyChangedSignal("Text"):Connect(function()
+    currentState.equationText = EqInput.Text
+    if currentState.previewActive then refreshPreviewVisual(true) end
+end)
+
+ClearEqBtn.MouseButton1Click:Connect(function()
+    EqInput.Text = ""
+    currentState.equationText = ""
+    if currentState.previewActive then refreshPreviewVisual(true) end
+end)
+
+ShowBtn.MouseButton1Click:Connect(function() refreshPreviewVisual(false) end)
+
+MultiInput.FocusLost:Connect(function() 
+    currentState.multi = tonumber(MultiInput.Text) or 1 
+    if currentState.previewActive then refreshPreviewVisual(true) end
+end)
+
+UserInputService.InputBegan:Connect(function(input, processed)
+    if processed then return end
+    if input.KeyCode == Enum.KeyCode.B then executeBuild()
+    elseif input.KeyCode == Enum.KeyCode.P then refreshPreviewVisual(false) end
+end)
+
+
+-- // --- [SECTION: EXPLICIT PRESET SELECTION OVERLAY] ---
+local EqPresetContainer = Instance.new("Frame")
+EqPresetContainer.Size = UDim2.new(0, 165, 0, 140)
+EqPresetContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+EqPresetContainer.BorderSizePixel = 0
+EqPresetContainer.Visible = false
+EqPresetContainer.ZIndex = 25
+EqPresetContainer.Parent = ScreenGui
+Instance.new("UICorner", EqPresetContainer).CornerRadius = UDim.new(0, 4)
+
+local EqPresetScroll = Instance.new("ScrollingFrame")
+EqPresetScroll.Size = UDim2.new(1, 0, 1, 0)
+EqPresetScroll.BackgroundTransparency = 1
+EqPresetScroll.ScrollBarThickness = 4
+EqPresetScroll.ZIndex = 25
+EqPresetScroll.Parent = EqPresetContainer
+local EqPresetLayout = Instance.new("UIListLayout", EqPresetScroll)
+EqPresetLayout.SortOrder = Enum.SortOrder.LayoutOrder
+
+local presetLibrary = {
+    {Name = "Star Burst Lines", Text = "y=2x\ny=x\ny=0.5x\ny=-0.5x\ny=-x\ny=-2x\nx=0\ny=0"},
+    {Name = "Perfect Circle", Text = "r=20"},
+    {Name = "Sine Wave Lattice", Text = "y=sin(x/4)*8\ny=-sin(x/4)*8"},
+    {Name = "Spiral Arena", Text = "r=theta*5"},
+    {Name = "Butterfly Ring", Text = "r=12+sin(theta)*5"},
+    {Name = "Axis Cross Only", Text = "x=0\ny=0"}
+}
+
+for i, preset in ipairs(presetLibrary) do
+    local PBtn = Instance.new("TextButton")
+    PBtn.Size = UDim2.new(1, 0, 0, 25)
+    PBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+    PBtn.BackgroundTransparency = (i % 2 == 0) and 0.5 or 0.7
+    PBtn.Text = "  " .. preset.Name
+    PBtn.TextColor3 = Color3.fromRGB(230, 230, 230)
+    PBtn.TextXAlignment = Enum.TextXAlignment.Left
+    PBtn.Font = Enum.Font.Gotham
+    PBtn.TextSize = 11
+    PBtn.ZIndex = 25
+    PBtn.Parent = EqPresetScroll
+    
+    PBtn.MouseButton1Click:Connect(function()
+        EqInput.Text = preset.Text
+        currentState.equationText = preset.Text
+        EqPresetContainer.Visible = false
+        if currentState.previewActive then refreshPreviewVisual(true) end
+    end)
+end
+EqPresetScroll.CanvasSize = UDim2.new(0, 0, 0, #presetLibrary * 25)
+
+EqPresetMainBtn.MouseButton1Click:Connect(function()
+    EqPresetContainer.Visible = not EqPresetContainer.Visible
+end)
+
+RunService.RenderStepped:Connect(function()
+    if EqPresetContainer.Visible and EqPresetMainBtn.Visible then
+        EqPresetContainer.Position = UDim2.new(0, EqPresetMainBtn.AbsolutePosition.X, 0, EqPresetMainBtn.AbsolutePosition.Y + EqPresetMainBtn.AbsoluteSize.Y + 32)
+    end
+end)
+
+
+-- // --- [SECTION: WINDOW POSITIONING & LAYOUT MANAGERS] ---
+local dragging, dragInput, dragStart, startPos
+local function registerDragHook(targetElement)
+    targetElement.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true dragStart = input.Position startPos = MainFrame.Position
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    targetElement.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
+    end)
+end
+
+registerDragHook(TitleBar)
+registerDragHook(ExpandBtn)
+
+UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        local newX = startPos.X.Offset + delta.X
+        local newY = startPos.Y.Offset + delta.Y
+        local screenSize = ScreenGui.AbsoluteSize
+        local frameSize = MainFrame.AbsoluteSize
+        local minX = -screenSize.X * startPos.X.Scale
+        local maxX = screenSize.X * (1 - startPos.X.Scale) - frameSize.X
+        local minY = -screenSize.Y * startPos.Y.Scale
+        local maxY = screenSize.Y * (1 - startPos.Y.Scale) - frameSize.Y
+        newX = math.clamp(newX, minX, maxX)
+        newY = math.clamp(newY, minY, maxY)
+        MainFrame.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
+    end
+end)
+
+MinimizeBtn.MouseButton1Click:Connect(function()
+    TitleBar.Visible = false ToggleBar.Visible = false ScrollFrame.Visible = false EqPresetContainer.Visible = false
+    MainFrame.Size = UDim2.new(0, 50, 0, 50) ExpandBtn.Visible = true
+end)
+
+ExpandBtn.MouseButton1Click:Connect(function()
+    ExpandBtn.Visible = false TitleBar.Visible = true ToggleBar.Visible = true ScrollFrame.Visible = true
+    updateLayoutSize() 
+end)
+
+CloseBtn.MouseButton1Click:Connect(function()
+    if previewConnection then previewConnection:Disconnect() end
+    if previewModel then previewModel:Destroy() end
+    if airwalkPart then airwalkPart:Destroy() end
+    ScreenGui:Destroy()
+end)
+
+-- Deployment Sequence
+TitleBar.Visible = true ToggleBar.Visible = true ScrollFrame.Visible = true DropdownContainer.Visible = false
+ExpandBtn.Visible = false updateLayoutSize()
