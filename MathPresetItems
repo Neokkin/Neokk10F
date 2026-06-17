@@ -199,7 +199,7 @@ local GeometryModule = {
     Surfaces3DAdvanced = {
         MobiusStrip = function(u, v, R) return {x = (R + v * cos(u / 2)) * cos(u), y = (R + v * cos(u / 2)) * sin(u), z = v * sin(u / 2)} end,
         KleinBottleFigure8 = function(u, v, r) return {x = (r + cos(u / 2) * sin(v) - sin(u / 2) * sin(2 * v)) * cos(u), y = (r + cos(u / 2) * sin(v) - sin(u / 2) * sin(2 * v)) * sin(u), z = sin(u / 2) * sin(v) + cos(u / 2) * sin(2 * v)} end,
-        BoysSurfaceApprox = function(u, v) local d = 2 - sqrt(2) * sin(3 * u) * sin(2 * v); return {x = (sqrt(2) * cos^2(v) * cos(2 * u) + cos(u) * sin(2 * v)) / d, y = (sqrt(2) * cos^2(v) * sin(2 * u) - sin(u) * sin(2 * v)) / d, z = (3 * cos^2(v)) / d} end,
+        BoysSurfaceApprox = function(u, v) local d = 2 - sqrt(2) * sin(3 * u) * sin(2 * v); return {x = (sqrt(2) * cos(v)^2 * cos(2 * u) + cos(u) * sin(2 * v)) / d, y = (sqrt(2) * cos(v)^2 * sin(2 * u) - sin(u) * sin(2 * v)) / d, z = (3 * cos(v)^2) / d} end,
         EnneperSurface = function(u, v) return {x = u - (u^3 / 3) + u * v^2, y = v - (v^3 / 3) + v * u^2, z = u^2 - v^2} end,
         Pseudosphere = function(u, v, r) return {x = r * cos(u) * sin(v), y = r * sin(u) * sin(v), z = r * (cos(v) + log(tan(v / 2)))} end,
         KuenSurface = function(u, v) local d = 1 + u^2 * sin(v)^2; return {x = (2 * cos(u) * (u^2 * sin(v)^2 + 1) - 2 * u * cos(v) * sin(u)) / d, y = (2 * sin(u) * (u^2 * sin(v)^2 + 1) + 2 * u * cos(v) * cos(u)) / d, z = log(tan(v / 2)) + (2 * cos(v)) / d} end,
@@ -223,7 +223,7 @@ local GeometryModule = {
         BourSurface = function(u, v) return {x = u * cos(v) - 0.5 * u^2 * cos(2 * v), y = -u * sin(v) - 0.5 * u^2 * sin(2 * v), z = (4 / 3) * u^1.5 * cos(1.5 * v)} end,
         TrefoilTube = function(u, v, r) return {x = (2 + cos(3 * u)) * cos(2 * u) + r * cos(v), y = (2 + cos(3 * u)) * sin(2 * u) + r * cos(v), z = sin(3 * u) + r * sin(v)} end,
         HelixTube = function(u, v, R, r, c) return {x = (R + r * cos(v)) * cos(u), y = (R + r * cos(v)) * sin(u), z = c * u + r * sin(v)} end,
-        SeashellSurface = function(u, v, a, b, c) return {x = (a * (1 - v / (2 * pi)) * (1 + cos(u)) + c) * cos(n * v), y = (a * (1 - v / (2 * pi)) * (1 + cos(u)) + c) * sin(n * v), z = b * v / (2 * pi) + a * (1 - v / (2 * pi)) * sin(u)} end,
+        SeashellSurface = function(u, v, a, b, c, n) return {x = (a * (1 - v / (2 * pi)) * (1 + cos(u)) + c) * cos(n * v), y = (a * (1 - v / (2 * pi)) * (1 + cos(u)) + c) * sin(n * v), z = b * v / (2 * pi) + a * (1 - v / (2 * pi)) * sin(u)} end,
         SnailSurface = function(u, v) return {x = u * cos(v) * sin(u), y = u * cos(u) * cos(v), z = -u * sin(v)} end,
         GyroidApprox = function(u, v, c) return {x = u, y = v, z = c * (sin(u) * cos(v) + sin(v) * cos(0) + sin(0) * cos(u))} end,
         SteinhardtSurface = function(u, v, a) return {x = u, y = v, z = a * sin(u) * sin(v)} end
