@@ -1,264 +1,364 @@
--- // --- [CYBER VIOLET MATH PRESET MATRIX] ---
--- Returns a dictionary mapping Categories -> Preset Names -> Compiled Formula Strings
--- Ensure this is loaded via: local presets = loadstring(game:HttpGet("URL"))()
+return {
+["2D Shapes: Basic"] = {
+    {Name="Line Segment", RawName="Line Segment", Text="x = (i - 1) / (n - 1) * 30 - 15\ny = 0\nz = 0"},
+    {Name="Equilateral Triangle", RawName="Equilateral Triangle", Text="r = 15 * cos(pi / 3) / cos((theta % (2 * pi / 3)) - pi / 3)\nz = 0"},
+    {Name="Isosceles Triangle", RawName="Isosceles Triangle", Text="x = 15 * cos(theta)\ny = max(-6, 18 * sin(theta))\nz = 0"},
+    {Name="Scalene Triangle", RawName="Scalene Triangle", Text="x = 15 * cos(theta) + 4 * sin(theta)\ny = 10 * sin(theta)\nz = 0"},
+    {Name="Square", RawName="Square", Text="r = 15 / max(abs(cos(theta)), abs(sin(theta)))\nz = 0"},
+    {Name="Rectangle", RawName="Rectangle", Text="x = max(-16, min(16, 22 * cos(theta)))\ny = max(-10, min(10, 14 * sin(theta)))\nz = 0"},
+    {Name="Parallelogram", RawName="Parallelogram", Text="y = max(-10, min(10, 14 * sin(theta)))\nx = max(-15, min(15, 20 * cos(theta))) + y * 0.4\nz = 0"},
+    {Name="Rhombus", RawName="Rhombus", Text="r = 14 / (abs(cos(theta)) + abs(sin(theta)))\nz = 0"},
+    {Name="Trapezoid", RawName="Trapezoid", Text="y = max(-10, min(10, 14 * sin(theta)))\nx = max(-16, min(16, 22 * cos(theta))) * (1 - y * 0.02)\nz = 0"},
+    {Name="Kite", RawName="Kite", Text="r = 14 / (abs(cos(theta)) + max(-0.4 * sin(theta), 1.4 * sin(theta)))\nz = 0"},
 
-local MathPresets = {
-    ["2D Shapes: Basic"] = {
-        ["Line Segment"] = "x = (i - 1) / (n - 1) * 30 - 15\ny = 0\nz = 0",
-        ["Equilateral Triangle"] = "r = 15 * cos(pi / 3) / cos((theta % (2 * pi / 3)) - pi / 3)\nz = 0",
-        ["Isosceles Triangle"] = "x = 15 * cos(theta)\ny = max(-6, 18 * sin(theta))\nz = 0",
-        ["Scalene Triangle"] = "x = 15 * cos(theta) + 4 * sin(theta)\ny = 10 * sin(theta)\nz = 0",
-        ["Square"] = "r = 15 / max(abs(cos(theta)), abs(sin(theta)))\nz = 0",
-        ["Rectangle"] = "x = max(-16, min(16, 22 * cos(theta)))\ny = max(-10, min(10, 14 * sin(theta)))\nz = 0",
-        ["Parallelogram"] = "y = max(-10, min(10, 14 * sin(theta)))\nx = max(-15, min(15, 20 * cos(theta))) + y * 0.4\nz = 0",
-        ["Rhombus"] = "r = 14 / (abs(cos(theta)) + abs(sin(theta)))\nz = 0",
-        ["Trapezoid"] = "y = max(-10, min(10, 14 * sin(theta)))\nx = max(-16, min(16, 22 * cos(theta))) * (1 - y * 0.02)\nz = 0",
-        ["Kite"] = "r = 14 / (abs(cos(theta)) + max(-0.4 * sin(theta), 1.4 * sin(theta)))\nz = 0",
-        ["Regular Pentagon"] = "r = 14 * cos(pi / 5) / cos((theta % (2 * pi / 5)) - pi / 5)\nz = 0",
-        ["Regular Hexagon"] = "r = 14 * cos(pi / 6) / cos((theta % (2 * pi / 6)) - pi / 6)\nz = 0",
-        ["Regular Heptagon"] = "r = 14 * cos(pi / 7) / cos((theta % (2 * pi / 7)) - pi / 7)\nz = 0",
-        ["Regular Octagon"] = "r = 14 * cos(pi / 8) / cos((theta % (2 * pi / 8)) - pi / 8)\nz = 0",
-        ["Regular Nonagon"] = "r = 14 * cos(pi / 9) / cos((theta % (2 * pi / 9)) - pi / 9)\nz = 0",
-        ["Regular Decagon"] = "r = 14 * cos(pi / 10) / cos((theta % (2 * pi / 10)) - pi / 10)\nz = 0",
-        ["Semicircle Outline"] = "x = 15 * cos(theta / 2)\ny = 15 * sin(theta / 2)\nz = 0",
-        ["Chevron Arrow"] = "y = abs(cos(theta)) * 4 + sin(theta) * 12\nx = cos(theta) * 15\nz = 0",
-        ["L-Block Profile"] = "x = (theta < pi) and max(-5, min(15, 20 * cos(theta))) or max(-15, min(-5, 20 * cos(theta)))\ny = (theta < pi/2 or theta > 3*pi/2) and max(-15, min(15, 20 * sin(theta))) or max(-15, min(-5, 20 * sin(theta)))\nz = 0",
-        ["T-Block Profile"] = "y = max(-12, min(12, 16 * sin(theta)))\nx = (y > 4) and max(-16, min(16, 20 * cos(theta))) or max(-6, min(6, 20 * cos(theta)))\nz = 0",
-        ["Cross Outline"] = "r = 14 / max(abs(cos(2 * theta)), abs(sin(2 * theta))) * (1 - 0.25 * abs(sin(4 * theta)))\nz = 0",
-        ["Low-Poly Circle"] = "x = 15 * cos(floor(theta * 12) / 12)\ny = 15 * sin(floor(theta * 12) / 12)\nz = 0",
-        ["Ellipse"] = "x = 20 * cos(theta)\ny = 10 * sin(theta)\nz = 0",
-        ["Symmetrical Oval"] = "x = 18 * cos(theta)\ny = 11 * sin(theta) * (1 + 0.1 * abs(cos(theta)))\nz = 0",
-        ["Symmetrical Tear Drop"] = "x = 14 * sin(theta)\ny = 16 * cos(theta) * (1 - 0.25 * sin(theta))\nz = 0",
-        ["Crescent Moon"] = "x = 15 * cos(theta) - abs(cos(theta)) * 5\ny = 15 * sin(theta)\nz = 0",
-        ["4-Pointed Star"] = "r = 10 + sin(theta * 4) * 4\nz = 0",
-        ["5-Pointed Star"] = "r = 11 + sin(theta * 5) * 4\nz = 0",
-        ["6-Pointed Star"] = "r = 11 + sin(theta * 6) * 4\nz = 0",
-        ["Rounded Rectangle Path"] = "x = max(-14, min(14, 18 * cos(theta))) + 2 * cos(theta)^3\ny = max(-9, min(9, 13 * sin(theta))) + 2 * sin(theta)^3\nz = 0"
-    },
-    ["2D Shapes: Advanced"] = {
-        ["Reuleaux Triangle"] = "r = 13 * (1 + 0.08 * cos(theta * 3))\nz = 0",
-        ["Lemniscate Loop"] = "r = 16 * sqrt(abs(cos(2 * theta)))\nz = 0",
-        ["Archimedean Spiral"] = "r = 0.4 * theta * 4\nz = 0",
-        ["Logarithmic Spiral"] = "r = 2 * exp(0.15 * theta)\nz = 0",
-        ["Astroid"] = "x = 15 * cos(theta)^3\ny = 15 * sin(theta)^3\nz = 0",
-        ["Deltoid Curve"] = "x = 5 * (2 * cos(theta) + cos(2 * theta))\ny = 5 * (2 * sin(theta) - sin(2 * theta))\nz = 0",
-        ["Cardioid Heart"] = "r = 10 * (1 - sin(theta)) * (1 + 0.05 * abs(cos(theta)))\nz = 0",
-        ["Nephroid"] = "x = 4 * (3 * cos(theta) - cos(3 * theta))\ny = 4 * (3 * sin(theta) - sin(3 * theta))\nz = 0",
-        ["Limacon of Pascal"] = "r = 6 + 10 * cos(theta)\nz = 0",
-        ["3-Petaled Rose"] = "r = 15 * cos(theta * 3)\nz = 0",
-        ["4-Petaled Rose"] = "r = 15 * cos(theta * 4)\nz = 0",
-        ["Lissajous Figure (1:2)"] = "x = 15 * sin(1 * theta)\ny = 15 * sin(2 * theta)\nz = 0",
-        ["Lissajous Figure (3:4)"] = "x = 15 * sin(3 * theta)\ny = 15 * sin(4 * theta)\nz = 0",
-        ["Hypotrochoid Profile"] = "x = 11 * cos(theta) + 5 * cos(2.5 * theta)\ny = 11 * sin(theta) - 5 * sin(2.5 * theta)\nz = 0",
-        ["Epitrochoid Profile"] = "x = 10 * cos(theta) - 4 * cos(3.5 * theta)\ny = 10 * sin(theta) - 4 * sin(3.5 * theta)\nz = 0",
-        ["Koch Snowflake Outline"] = "r = 13 * (1 + 0.12 * cos(theta * 3) + 0.04 * cos(theta * 9))\nz = 0",
-        ["Dragon Curve Segment"] = "x = 14 * (theta / pi) * cos(theta * 2.5)\ny = 14 * (theta / pi) * sin(theta * 2.5)\nz = 0",
-        ["Folium of Descartes"] = "r = 25 * 3 * sin(theta) * cos(theta) / (abs(cos(theta)^3 + sin(theta)^3) + 0.1)\nz = 0",
-        ["Cissoid of Diocles"] = "r = 15 * sin(theta)^2 / (abs(cos(theta)) + 0.1)\nz = 0",
-        ["Strophoid Outline"] = "r = 14 * cos(2 * theta) / (abs(cos(theta)) + 0.1)\nz = 0",
-        ["Cassini Oval"] = "r = 15 * sqrt(abs(cos(2 * theta) + sqrt(1.2 - sin(2 * theta)^2)))\nz = 0",
-        ["Watt's Curve"] = "r = 15 * sqrt(0.8 + 0.4 * cos(2 * theta) * sin(theta))\nz = 0",
-        ["Butterfly Curve"] = "r = exp(cos(theta)) - 2 * cos(4 * theta) + sin(theta / 12)^5 * 4\nz = 0",
-        ["8-Teeth Gear Profile"] = "r = 13 + sin(theta * 8) * 1.8\nz = 0",
-        ["Maltese Cross Outline"] = "r = 15 * (abs(cos(2 * theta)) > 0.7 and 1 or 0.6 + 0.3 * abs(sin(4 * theta)))\nz = 0",
-        ["Sine Wave Ring"] = "r = 14 + sin(theta * 14) * 1.2\nz = 0",
-        ["Superellipse Squircle"] = "r = 15 / (abs(cos(theta))^3.5 + abs(sin(theta))^3.5)^(1/3.5)\nz = 0",
-        ["Egg-Shaped Curve"] = "x = 14 * cos(theta)\ny = 18 * sin(theta) * (1 + 0.2 * sin(theta))\nz = 0",
-        ["Vesica Piscis Outline"] = "x = 15 * cos(theta)\ny = 10 * sin(theta) * abs(sin(theta))\nz = 0",
-        ["Quad Bezier Path"] = "x = (1 - (i/n))^2 * -15 + 2 * (1-(i/n)) * (i/n) * 5 + (i/n)^2 * 15\ny = (1 - (i/n))^2 * -10 + 2 * (1-(i/n)) * (i/n) * 20 + (i/n)^2 * -10\nz = 0"
-    },
-    ["2D Surfaces: Basic"] = {
-        ["Triangular Patch"] = "local row = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal col = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = col * 30 * (row + 0.5)\nz = row * 30\ny = 0",
-        ["Square Plane"] = "local row = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal col = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = col * 30\nz = row * 30\ny = 0",
-        ["Rectangular Face"] = "local row = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal col = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = col * 36\nz = row * 20\ny = 0",
-        ["Parallelogram Sheet"] = "local row = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal col = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nz = row * 26\nx = col * 28 + z * 0.35\ny = 0",
-        ["Trapezoidal Sheet"] = "local row = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal col = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nz = row * 26\nx = col * 28 * (1.3 - (row + 0.5) * 0.5)\ny = 0",
-        ["Pentagonal Disk"] = "local ring = floor((i - 1) / (n / 10)) / 10\nlocal a = ((i - 1) % (n / 10)) / (n / 10) * 2 * pi\nlocal r = ring * 15 * cos(pi/5) / cos((a % (2*pi/5)) - pi/5)\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Hexagonal Disk"] = "local ring = floor((i - 1) / (n / 10)) / 10\nlocal a = ((i - 1) % (n / 10)) / (n / 10) * 2 * pi\nlocal r = ring * 15 * cos(pi/6) / cos((a % (2*pi/6)) - pi/6)\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Octagonal Disk"] = "local ring = floor((i - 1) / (n / 10)) / 10\nlocal a = ((i - 1) % (n / 10)) / (n / 10) * 2 * pi\nlocal r = ring * 15 * cos(pi/8) / cos((a % (2*pi/8)) - pi/8)\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Circular Sector"] = "local ring = floor((i - 1) / (n / 10)) / 10\nlocal angle = ((i - 1) % (n / 10)) / (n / 10) * (pi * 0.75)\nx = ring * 16 * cos(angle)\nz = ring * 16 * sin(angle)\ny = 0",
-        ["Circular Segment"] = "local ring = floor((i - 1) / (n / 10)) / 10\nlocal angle = ((i - 1) % (n / 10)) / (n / 10) * pi\nx = ring * 16 * cos(angle)\nz = max(-4, ring * 16 * sin(angle))\ny = 0",
-        ["Annulus Flat Ring"] = "local ring = 8 + (floor((i - 1) / (n / 12)) / 12) * 8\nlocal angle = ((i - 1) % (n / 12)) / (n / 12) * 2 * pi\nx = ring * cos(angle)\nz = ring * sin(angle)\ny = 0",
-        ["Elliptic Disk"] = "local ring = (floor((i - 1) / (n / 12)) / 12)\nlocal angle = ((i - 1) % (n / 12)) / (n / 12) * 2 * pi\nx = ring * 22 * cos(angle)\nz = ring * 12 * sin(angle)\ny = 0",
-        ["Semicircular Plate"] = "local ring = (floor((i - 1) / (n / 12)) / 12)\nlocal angle = ((i - 1) % (n / 12)) / (n / 12) * pi\nx = ring * 16 * cos(angle)\nz = ring * 16 * sin(angle)\ny = 0",
-        ["Quadrant Face"] = "local ring = floor((i-1)/(n/10))/10\nlocal a = ((i-1)%(n/10))/(n/10)*(pi/2)\nx = ring * 16 * cos(a)\nz = ring * 16 * sin(a)\ny = 0",
-        ["L-Shape Plane Mesh"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal clip = (u > 0.4 and v > 0.4) and 0 or 1\nx = (u - 0.5) * 30 * clip\nz = (v - 0.5) * 30 * clip\ny = 0",
-        ["T-Shape Plane Mesh"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal clip = (v > 0.3 and (u < 0.35 or u > 0.65)) and 0 or 1\nx = (u - 0.5) * 30 * clip\nz = (v - 0.5) * 30 * clip\ny = 0",
-        ["H-Shape Plane Mesh"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal clip = ((v < 0.35 or v > 0.65) and (u > 0.35 and u < 0.65)) and 0 or 1\nx = (u - 0.5) * 30 * clip\nz = (v - 0.5) * 30 * clip\ny = 0",
-        ["Cross Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal clip = ((u < 0.3 or u > 0.7) and (v < 0.3 or v > 0.7)) and 0 or 1\nx = (u - 0.5) * 30 * clip\nz = (v - 0.5) * 30 * clip\ny = 0",
-        ["Chevron Face"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 20\nz = v * 20 + abs(u) * 10\ny = 0",
-        ["Diamond Plate Face"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = (u + v) * 15\nz = (u - v) * 15\ny = 0",
-        ["Sheared Ribbon Face"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 30 + v * 10\nz = v * 10\ny = 0",
-        ["Grid Quadrant"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = u * 20\nz = v * 20\ny = 0",
-        ["Rounded Corner Patch"] = "local r = floor((i-1)/(n/10))/10 * 15\nlocal a = ((i-1)%(n/10))/(n/10) * (pi/2)\nx = 15 - r * cos(a)\nz = 15 - r * sin(a)\ny = 0",
-        ["Chamfer Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal clip = (abs(u) + abs(v) > 0.7) and 0 or 1\nx = u * 25 * clip\nz = v * 25 * clip\ny = 0",
-        ["Heart Face Solid"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * 10 * (1 - sin(a)) * (1 + 0.05 * abs(cos(a)))\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Star Face Solid"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * (10 + sin(a * 5) * 4)\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Crescent Plate"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nx = ring * 15 * cos(a) - abs(cos(a)) * 5 * ring\nz = ring * 15 * sin(a)\ny = 0",
-        ["Regular Decagon Face"] = "local ring = floor((i - 1) / (n / 10)) / 10\nlocal a = ((i - 1) % (n / 10)) / (n / 10) * 2 * pi\nlocal r = ring * 15 * cos(pi/10) / cos((a % (2*pi/10)) - pi/10)\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Vesica Piscis Plate"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nx = ring * 15 * cos(a)\nz = ring * 10 * sin(a) * abs(sin(a))\ny = 0",
-        ["Concentric Disk Ring"] = "local ring = (floor((i - 1) / (n / 4)) / 4) * 12 + 4\nlocal a = ((i - 1) % (n / 4)) / (n / 4) * 2 * pi\nx = ring * cos(a)\nz = ring * sin(a)\ny = 0"
-    },
-    ["2D Surfaces: Advanced"] = {
-        ["Bilinear Bezier"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (1-u)*(1-v)*-15 + u*(1-v)*15 + (1-u)*v*-12 + u*v*12\nz = (1-u)*(1-v)*-15 + u*(1-v)*-12 + (1-u)*v*15 + u*v*12\ny = (1-u)*(1-v)*0 + u*(1-v)*5 + (1-u)*v*10 + u*v*-5",
-        ["Biquadratic Bezier"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (1-u)^2*-15 + 2*(1-u)*u*0 + u^2*15\nz = (1-v)^2*-15 + 2*(1-v)*v*0 + v^2*15\ny = 8 * sin(u * pi) * cos(v * pi)",
-        ["Bicubic Surface Patch"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (u - 0.5) * 30\nz = (v - 0.5) * 30\ny = 5 * (u^3 - 3*u*v^2)",
-        ["Flat NURBS Mesh"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (u - 0.5) * 30\nz = (v - 0.5) * 30\ny = sin(u * pi) * sin(v * pi) * 4",
-        ["Sine Ripple Flat Disk"] = "local r = (floor((i - 1) / (n / 16)) / 16) * 16\nlocal a = ((i - 1) % (n / 16)) / (n / 16) * 2 * pi\nx = r * cos(a)\nz = r * sin(a)\ny = sin(r * 0.8) * 3",
-        ["Parabolic Plane Slice"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (u - 0.5) * 26\nz = (v - 0.5) * 26\ny = (x^2 / 10) - (z^2 / 10)",
-        ["Hyperbolic Sheet Segment"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (u - 0.5) * 24\nz = (v - 0.5) * 24\ny = x * v",
-        ["Logarithmic Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (u - 0.5) * 20\nz = (v - 0.5) * 20\ny = log(abs(x) + abs(z) + 1) * 3",
-        ["Gaussian Curve Plane"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (u - 0.5) * 24\nz = (v - 0.5) * 24\ny = 6 * exp(-(x^2 + z^2)/25)",
-        ["Flat Voronoi Cell"] = "local ring = floor((i-1)/(n/10))/10\nlocal a = ((i-1)%(n/10))/(n/10)*2*pi\nlocal r = ring * 15 * (1 - 0.15 * cos(a*3) + 0.1 * sin(a*5))\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Delaunay Triangle Patch"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nx = (u - 0.5) * 25 + sin(v*10)*2\nz = (v - 0.5) * 25 + cos(u*10)*2\ny = 0",
-        ["Fractured Polygon Plate"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * 14 * (1 + 0.2 * sin(a*8))\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Superelliptic Disk"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * 15 / (abs(cos(a))^3.5 + abs(sin(a))^3.5)^(1/3.5)\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Perforated Plate"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal clip = (sin(u*20)*sin(v*20) > 0.5) and 0 or 1\nx = u * 30 * clip\nz = v * 30 * clip\ny = 0",
-        ["Archimedean Spiral Band"] = "local t2 = (i / n) * 6 * pi\nlocal r = 1 + t2 * 0.8\nx = r * cos(t2)\nz = r * sin(t2)\ny = sin(r * 2)",
-        ["Cardioid Solid Mesh"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * 10 * (1 - sin(a))\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Astroid Solid Mesh"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nx = ring * 15 * cos(a)^3\nz = ring * 15 * sin(a)^3\ny = 0",
-        ["Lemniscate Solid Plate"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * 16 * sqrt(abs(cos(2 * a)))\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Rose Curve Solid (3P)"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * 15 * cos(a * 3)\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Rose Curve Solid (4P)"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * 15 * cos(a * 4)\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Lissajous Filled Weave"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nx = ring * 15 * sin(3 * a)\nz = ring * 15 * sin(4 * a)\ny = 0",
-        ["Koch Snowflake Solid"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * 13 * (1 + 0.12 * cos(a * 3) + 0.04 * cos(a * 9))\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Topology Optimized Plate"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal clip = (abs(u*v) < 0.05 or u^2+v^2 > 0.2) and 1 or 0\nx = u * 30 * clip\nz = v * 30 * clip\ny = 0",
-        ["Concentric Web Patch"] = "local r = (floor((i - 1) / (n / 6)) / 6) * 14\nlocal a = ((i - 1) % (n / 6)) / (n / 6) * 2 * pi\nx = r * cos(a) * (1 + 0.1 * sin(a * 12))\nz = r * sin(a) * (1 + 0.1 * sin(a * 12))\ny = 0",
-        ["Gear Face with Hub"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * (13 + sin(a * 8) * 1.8)\nx = r * cos(a)\nz = r * sin(a)\ny = (ring < 0.3) and 2 or 0",
-        ["Deltoid Solid Plate"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nx = ring * 5 * (2 * cos(a) + cos(2 * a))\nz = ring * 5 * (2 * sin(a) - sin(2 * a))\ny = 0",
-        ["Nephroid Solid Plate"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nx = ring * 4 * (3 * cos(a) - cos(3 * a))\nz = ring * 4 * (3 * sin(a) - sin(3 * a))\ny = 0",
-        ["Limacon Looped Plate"] = "local ring = floor((i-1)/(n/12))/12\nlocal a = ((i-1)%(n/12))/(n/12)*2*pi\nlocal r = ring * (6 + 10 * cos(a))\nx = r * cos(a)\nz = r * sin(a)\ny = 0",
-        ["Chevron Herringbone"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 25\nz = v * 25\ny = abs(sin(u*10 + v*10)) * 2",
-        ["Custom Flat Spline"] = "local t2 = (i / n) * 2 * pi\nx = 12 * sin(t2) + 4 * sin(3 * t2)\nz = 12 * cos(t2) - 4 * cos(2 * t2)\ny = 0"
-    },
-    ["3D Shapes: Basic"] = {
-        ["Cube"] = "local side = floor(n^(1/3))\nlocal dx = (i - 1) % side\nlocal dy = floor(((i - 1) % (side^2)) / side)\nlocal dz = floor((i - 1) / (side^2))\nx = (dx / max(1, side - 1) - 0.5) * 20\ny = (dy / max(1, side - 1) - 0.5) * 20\nz = (dz / max(1, side - 1) - 0.5) * 20",
-        ["Rectangular Prism"] = "local side = floor(n^(1/3))\nlocal dx = (i - 1) % side\nlocal dy = floor(((i - 1) % (side^2)) / side)\nlocal dz = floor((i - 1) / (side^2))\nx = (dx / max(1, side - 1) - 0.5) * 26\ny = (dy / max(1, side - 1) - 0.5) * 14\nz = (dz / max(1, side - 1) - 0.5) * 18",
-        ["Triangular Prism"] = "local lay = floor((i - 1) / (n / 5))\nlocal sub = (i - 1) % (n / 5)\nlocal a = (sub / (n / 5)) * 2 * pi\nx = 10 * cos(pi / 3) / cos((a % (2 * pi / 3)) - pi / 3)\nz = 10 * sin(a)\ny = (lay / 4 - 0.5) * 22",
-        ["Pentagonal Prism"] = "local lay = floor((i - 1) / (n / 5))\nlocal sub = (i - 1) % (n / 5)\nlocal a = (sub / (n / 5)) * 2 * pi\nx = 11 * cos(pi / 5) / cos((a % (2 * pi / 5)) - pi / 5)\nz = 11 * sin(a)\ny = (lay / 4 - 0.5) * 22",
-        ["Hexagonal Prism"] = "local lay = floor((i - 1) / (n / 6))\nlocal sub = (i - 1) % (n / 6)\nlocal a = (sub / (n / 6)) * 2 * pi\nx = 11 * cos(pi / 6) / cos((a % (2 * pi / 6)) - pi / 6)\nz = 11 * sin(a)\ny = (lay / 5 - 0.5) * 22",
-        ["Octagonal Prism"] = "local lay = floor((i - 1) / (n / 8))\nlocal sub = (i - 1) % (n / 8)\nlocal a = (sub / (n / 8)) * 2 * pi\nx = 11 * cos(pi / 8) / cos((a % (2 * pi / 8)) - pi / 8)\nz = 11 * sin(a)\ny = (lay / 7 - 0.5) * 22",
-        ["Square Pyramid"] = "local h = floor((i - 1) / (n / 6))\nlocal sub = (i - 1) % (n / 6)\nlocal a = (sub / (n / 6)) * 2 * pi\nlocal scale = max(0, 1 - h / 5)\ny = (h / 5 - 0.5) * 18\nx = scale * 14 / max(abs(cos(a)), abs(sin(a))) * cos(a)\nz = scale * 14 / max(abs(cos(a)), abs(sin(a))) * sin(a)",
-        ["Tetrahedron"] = "local h = floor((i - 1) / (n / 6))\nlocal sub = (i - 1) % (n / 6)\nlocal a = (sub / (n / 6)) * 2 * pi\nlocal scale = max(0, 1 - h / 5)\ny = (h / 5 - 0.5) * 18\nx = scale * 14 * cos(pi/3) / cos((a % (2*pi/3)) - pi/3) * cos(a)\nz = scale * 14 * cos(pi/3) / cos((a % (2*pi/3)) - pi/3) * sin(a)",
-        ["Pentagonal Pyramid"] = "local h = floor((i - 1) / (n / 6))\nlocal sub = (i - 1) % (n / 6)\nlocal a = (sub / (n / 6)) * 2 * pi\nlocal scale = max(0, 1 - h / 5)\ny = (h / 5 - 0.5) * 18\nx = scale * 14 * cos(pi/5) / cos((a % (2*pi/5)) - pi/5) * cos(a)\nz = scale * 14 * cos(pi/5) / cos((a % (2*pi/5)) - pi/5) * sin(a)",
-        ["Hexagonal Pyramid"] = "local h = floor((i - 1) / (n / 6))\nlocal sub = (i - 1) % (n / 6)\nlocal a = (sub / (n / 6)) * 2 * pi\nlocal scale = max(0, 1 - h / 5)\ny = (h / 5 - 0.5) * 18\nx = scale * 14 * cos(pi/6) / cos((a % (2*pi/6)) - pi/6) * cos(a)\nz = scale * 14 * cos(pi/6) / cos((a % (2*pi/6)) - pi/6) * sin(a)",
-        ["Octahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal nx = 15 * sin(lat) * cos(lon)\nlocal ny = 15 * cos(lat)\nlocal nz = 15 * sin(lat) * sin(lon)\nlocal r = abs(nx) + abs(ny) + abs(nz)\nx = (nx / r) * 14\ny = (ny / r) * 14\nz = (nz / r) * 14",
-        ["Dodecahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.1 * abs(cos(3*lon)*sin(2*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Icosahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.15 * abs(cos(5*lon)*sin(3*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Low-Poly Cone"] = "local lay = floor((i - 1) / (n / 10))\nlocal sub = (i - 1) % (n / 10)\nlocal a = (sub / (n / 10)) * 2 * pi\nlocal scale = max(0, 1 - lay / 9)\nx = scale * 14 * cos(a)\nz = scale * 14 * sin(a)\ny = (lay / 9 - 0.5) * 20",
-        ["Low-Poly Cylinder"] = "local lay = floor((i - 1) / (n / 12))\nlocal sub = (i - 1) % (n / 12)\nlocal angle = (sub / (n / 12)) * 2 * pi\nx = 12 * cos(angle)\nz = 12 * sin(angle)\ny = (lay / max(1, floor(n/12) - 1) - 0.5) * 24",
-        ["Low-Poly Sphere"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nx = 15 * sin(lat) * cos(lon)\ny = 15 * cos(lat)\nz = 15 * sin(lat) * sin(lon)",
-        ["Low-Poly Ellipsoid"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nx = 20 * sin(lat) * cos(lon)\ny = 10 * cos(lat)\nz = 14 * sin(lat) * sin(lon)",
-        ["Wedge"] = "local side = floor(n^(1/3))\nlocal dx = (i - 1) % side\nlocal dy = floor(((i - 1) % (side^2)) / side)\nlocal dz = floor((i - 1) / (side^2))\ny = (dy / max(1, side - 1) - 0.5) * 20\nlocal scale = 1 - (dy / side)\nx = (dx / max(1, side - 1) - 0.5) * 20 * scale\nz = (dz / max(1, side - 1) - 0.5) * 20",
-        ["Corner Wedge"] = "local side = floor(n^(1/3))\nlocal dx = (i - 1) % side\nlocal dy = floor(((i - 1) % (side^2)) / side)\nlocal dz = floor((i - 1) / (side^2))\ny = (dy / max(1, side - 1) - 0.5) * 20\nlocal scale = 1 - (dy / side)\nx = (dx / max(1, side - 1) - 0.5) * 20 * scale\nz = (dz / max(1, side - 1) - 0.5) * 20 * scale",
-        ["Cone Frustum"] = "local lay = floor((i - 1) / (n / 10))\nlocal sub = (i - 1) % (n / 10)\nlocal a = (sub / (n / 10)) * 2 * pi\nlocal scale = 1 - (lay / 9) * 0.5\nx = scale * 14 * cos(a)\nz = scale * 14 * sin(a)\ny = (lay / 9 - 0.5) * 20",
-        ["Pyramid Frustum"] = "local h = floor((i - 1) / (n / 6))\nlocal sub = (i - 1) % (n / 6)\nlocal a = (sub / (n / 6)) * 2 * pi\nlocal scale = 1 - (h / 5) * 0.6\ny = (h / 5 - 0.5) * 18\nx = scale * 14 / max(abs(cos(a)), abs(sin(a))) * cos(a)\nz = scale * 14 / max(abs(cos(a)), abs(sin(a))) * sin(a)",
-        ["Oblique Cylinder"] = "local lay = floor((i - 1) / (n / 12))\nlocal sub = (i - 1) % (n / 12)\nlocal angle = (sub / (n / 12)) * 2 * pi\ny = (lay / max(1, floor(n/12) - 1) - 0.5) * 24\nx = 12 * cos(angle) + y * 0.4\nz = 12 * sin(angle)",
-        ["Oblique Cone"] = "local lay = floor((i - 1) / (n / 10))\nlocal sub = (i - 1) % (n / 10)\nlocal a = (sub / (n / 10)) * 2 * pi\nlocal scale = max(0, 1 - lay / 9)\ny = (lay / 9 - 0.5) * 20\nx = scale * 14 * cos(a) + y * 0.4\nz = scale * 14 * sin(a)",
-        ["Triangular Antiprism"] = "local lay = floor((i - 1) / (n / 5))\nlocal sub = (i - 1) % (n / 5)\nlocal a = (sub / (n / 5)) * 2 * pi + (lay % 2) * (pi / 3)\nx = 10 * cos(pi / 3) / cos((a % (2 * pi / 3)) - pi / 3) * cos(a)\nz = 10 * cos(pi / 3) / cos((a % (2 * pi / 3)) - pi / 3) * sin(a)\ny = (lay / 4 - 0.5) * 22",
-        ["Square Antiprism"] = "local lay = floor((i - 1) / (n / 5))\nlocal sub = (i - 1) % (n / 5)\nlocal a = (sub / (n / 5)) * 2 * pi + (lay % 2) * (pi / 4)\nlocal scale = 14 / max(abs(cos(a)), abs(sin(a)))\nx = scale * cos(a)\nz = scale * sin(a)\ny = (lay / 4 - 0.5) * 22",
-        ["Torus Donut"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nx = (12 + 4 * cos(v)) * cos(u)\nz = (12 + 4 * cos(v)) * sin(u)\ny = 4 * sin(v)",
-        ["Capsule"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nx = 10 * sin(lat) * cos(lon)\nz = 10 * sin(lat) * sin(lon)\ny = 10 * cos(lat) + (cos(lat) > 0 and 6 or -6)",
-        ["Bicone"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal scale = 1 - abs(cos(lat))\nx = 14 * scale * cos(lon)\nz = 14 * scale * sin(lon)\ny = 16 * cos(lat)",
-        ["Prolate Spheroid"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nx = 10 * sin(lat) * cos(lon)\ny = 20 * cos(lat)\nz = 10 * sin(lat) * sin(lon)",
-        ["Oblate Spheroid"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nx = 20 * sin(lat) * cos(lon)\ny = 10 * cos(lat)\nz = 20 * sin(lat) * sin(lon)"
-    },
-    ["3D Shapes: Advanced"] = {
-        ["Truncated Tetrahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.2 * abs(cos(3 * lon) * sin(3 * lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Cuboctahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.1 * abs(cos(4 * lon) * sin(2 * lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Truncated Cube"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.15 * max(abs(cos(4*lon)), abs(sin(4*lon))) * sin(lat)^4)\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Truncated Octahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.12 * abs(sin(4*lon) * sin(2*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Rhombicuboctahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.08 * abs(cos(4*lon) * sin(4*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Icosidodecahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.06 * abs(cos(5*lon) * sin(3*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Truncated Dodecahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 15 * (1 - 0.05 * abs(cos(5 * lon) * sin(5 * lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Truncated Icosahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 15 * (1 - 0.05 * abs(cos(5 * lon) * sin(5 * lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Rhombicosidodecahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 15 * (1 - 0.04 * abs(cos(5*lon) * sin(5*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Snub Cube"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.07 * abs(sin(4*lon + pi/4) * sin(3*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Snub Dodecahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.03 * abs(sin(5*lon + pi/5) * sin(4*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Small Stellated Dodecahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 + 4 * sin(lat*5) * cos(lon*5)\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Great Stellated Dodecahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 12 + 6 * abs(sin(lat*3) * cos(lon*3))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Rhombic Dodecahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 / (abs(sin(lat)*cos(lon)) + abs(sin(lat)*sin(lon)) + abs(cos(lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Triakis Octahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 + 0.15 * abs(sin(4*lon) * sin(2*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Hypercube Projection"] = "local u = (i / n) * 2 * pi\nx = 12 * cos(u) * cos(u * 2)\ny = 12 * sin(u) * cos(u * 2)\nz = 12 * sin(u * 2)",
-        ["Gomboc Approximation"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 + 0.2*cos(lat) - 0.1*cos(2*lon)*sin(lat)^2)\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Reuleaux Tetrahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 + 0.1 * sin(3*lon) * sin(2*lat))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Scutoid"] = "local h = (floor((i - 1) / (n / 12)) / 12) - 0.5\nlocal sub = (i - 1) % (n / 12)\nlocal theta = (sub / (n / 12)) * 2 * pi\nlocal sides = (h > 0) and 6 or 5\nlocal r = 12 * cos(pi / sides) / cos((theta % (2 * pi / sides)) - pi / sides)\nx = r * cos(theta + h * 0.3)\nz = r * sin(theta + h * 0.3)\ny = h * 24",
-        ["Oloid"] = "local u = (i / n) * 2 * pi\nlocal c = cos(u) local s = sin(u)\nx = 15 * (c / (1 + s*s))\ny = 15 * (s * c / (1 + s*s))\nz = 15 * (s / (1 + s*s)) + (u > pi and 4 or -4)",
-        ["Sphericon"] = "local phi = ((i - 1) / n) * 2 * pi\nlocal theta = ((i - 1) % 4) * pi / 2\nx = 14 * cos(phi) * (phi < pi and abs(cos(phi)) or abs(sin(phi)))\ny = 14 * sin(phi)\nz = 14 * cos(phi) * (phi >= pi and abs(cos(phi)) or abs(sin(phi)))",
-        ["Hexagonal Bifrustum"] = "local h = floor((i - 1) / (n / 6))\nlocal sub = (i - 1) % (n / 6)\nlocal a = (sub / (n / 6)) * 2 * pi\nlocal height = (h / 5 - 0.5) * 20\nlocal scale = 1 - abs(height)/15\nx = scale * 12 * cos(pi/6) / cos((a % (2*pi/6)) - pi/6) * cos(a)\nz = scale * 12 * cos(pi/6) / cos((a % (2*pi/6)) - pi/6) * sin(a)\ny = height",
-        ["Twisted Prism"] = "local lay = floor((i - 1) / (n / 6))\nlocal sub = (i - 1) % (n / 6)\nlocal a = (sub / (n / 6)) * 2 * pi\nlocal twist = lay * 0.2\nx = 10 * cos(a + twist)\nz = 10 * sin(a + twist)\ny = (lay / 5 - 0.5) * 24",
-        ["Gyroelongated Pyramid"] = "local lay = floor((i - 1) / (n / 5))\nlocal sub = (i - 1) % (n / 5)\nlocal a = (sub / (n / 5)) * 2 * pi + (lay * pi / 10)\nlocal scale = (lay > 3) and (1 - (lay-3)/2) or 1\nx = scale * 12 * cos(a)\nz = scale * 12 * sin(a)\ny = (lay / 5 - 0.5) * 22",
-        ["Csaszar Polyhedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 + 0.3 * sin(lat*2) * cos(lon*3))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Szilassi Polyhedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 + 0.2 * cos(lat*3) * sin(lon*2))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Jessen's Icosahedron"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nlocal r = 14 * (1 - 0.2 * abs(cos(2*lon) * sin(3*lat)))\nx = r * sin(lat) * cos(lon)\ny = r * cos(lat)\nz = r * sin(lat) * sin(lon)",
-        ["Schonhardt Polyhedron"] = "local lay = floor((i - 1) / (n / 3))\nlocal sub = (i - 1) % (n / 3)\nlocal a = (sub / (n / 3)) * 2 * pi\nlocal twist = lay * 0.4\nlocal r = 12\nx = r * cos(a + twist)\nz = r * sin(a + twist)\ny = (lay / 2 - 0.5) * 20",
-        ["Character Shell Blueprint"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nx = 8 * sin(lat) * cos(lon)\nz = 8 * sin(lat) * sin(lon)\ny = 24 * cos(lat) - 6",
-        ["Procedural Voxel Cluster"] = "local u = i * 137.5 * pi / 180\nlocal r = 15 * sqrt(i / n)\nx = r * cos(u) + sin(i * 1.3) * 3\nz = r * sin(u) + cos(i * 1.7) * 3\ny = sin(r * 2) * 5 + cos(i) * 2"
-    },
-    ["3D Surfaces: Basic"] = {
-        ["Open Cylinder Pipe"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5\nx = 12 * cos(u)\nz = 12 * sin(u)\ny = v * 26",
-        ["Open Cone Funnel"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)))\nx = v * 16 * cos(u)\nz = v * 16 * sin(u)\ny = (v - 0.5) * 24",
-        ["Hemispherical Bowl"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * (pi / 2)\nx = 15 * sin(v) * cos(u)\nz = 15 * sin(v) * sin(u)\ny = 15 * cos(v)",
-        ["Paraboloid Dish"] = "local r = (floor((i - 1) / (n / 16)) / 16) * 15\nlocal a = ((i - 1) % (n / 16)) / (n / 16) * 2 * pi\nx = r * cos(a)\nz = r * sin(a)\ny = (r^2 / 12) - 6",
-        ["Hyperboloid One Sheet"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 2\nx = 10 * sqrt(1 + v*v) * cos(u)\nz = 10 * sqrt(1 + v*v) * sin(u)\ny = v * 12",
-        ["Hyperboloid Two Sheets"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)))\nlocal z_sign = (v > 0.5) and 1 or -1\nlocal v_adj = abs(v - 0.5) * 2\nx = 10 * sinh(v_adj * 2) * cos(u)\nz = 10 * sinh(v_adj * 2) * sin(u)\ny = 10 * cosh(v_adj * 2) * z_sign",
-        ["Elliptic Paraboloid"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 24\nz = v * 24\ny = (u^2 * 10) + (v^2 * 15) - 6",
-        ["Hyperbolic Paraboloid"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 26\nz = v * 26\ny = (u*u - v*v) * 12",
-        ["Toroidal Section"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nx = (12 + 4 * cos(v)) * cos(u)\nz = (12 + 4 * cos(v)) * sin(u)\ny = 4 * sin(v)",
-        ["Corrugated Sheet"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 30\nz = v * 30\ny = sin(u * 20) * 2",
-        ["Helical Spring Surface"] = "local u = (i / n) * 6 * 2 * pi\nlocal r = 12 + 2 * cos(u * 14)\nx = r * cos(u)\nz = r * sin(u)\ny = (i / n) * 24 - 12",
-        ["Spiral Architecture Ramp"] = "local r = 8 + 8 * (((i - 1) % 4) / 4)\nlocal a = floor((i - 1) / 4) / (n / 4) * 4 * pi\nx = r * cos(a)\nz = r * sin(a)\ny = (a / (4 * pi)) * 20 - 10",
-        ["Catenoid Minimal Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5) * 2.5\nx = 6 * cosh(v) * cos(u)\nz = 6 * cosh(v) * sin(u)\ny = 6 * v",
-        ["Helicoid Minimal Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 4 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5) * 15\nx = v * cos(u)\nz = v * sin(u)\ny = u * 2 - 12",
-        ["Funnel Web Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal r = 15 * v^2 + 2\nx = r * cos(u)\nz = r * sin(u)\ny = v * 20 - 10",
-        ["Gabriel's Horn Trumpet"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) * 10 + 1\nlocal r = 10 / v\nx = r * cos(u)\nz = r * sin(u)\ny = v * 2.5 - 12.5",
-        ["Cylindrical Wedge Shell"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = 12 * cos(u)\nz = 12 * sin(u)\ny = v * 24 * (1 - abs(cos(u)))",
-        ["Conical Frustum Shell"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1)\nlocal r = 10 + 5 * v\nx = r * cos(u)\nz = r * sin(u)\ny = (v - 0.5) * 20",
-        ["Spherical Cap"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) * (pi / 4)\nx = 15 * sin(v) * cos(u)\nz = 15 * sin(v) * sin(u)\ny = 15 * cos(v)",
-        ["Spherical Zone"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) * (pi / 3) + (pi / 6)\nx = 15 * sin(v) * cos(u)\nz = 15 * sin(v) * sin(u)\ny = 15 * cos(v)",
-        ["Barrel Surface Shell"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal r = 12 + 4 * (1 - (v*2)^2)\nx = r * cos(u)\nz = r * sin(u)\ny = v * 24",
-        ["Pillow Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 24\nz = v * 24\ny = 6 * cos(u * pi) * cos(v * pi)",
-        ["Half-Pipe Trough"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * pi\nx = u * 24\nz = 10 * cos(v)\ny = 10 * sin(v)",
-        ["Fluted Column Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal r = 10 + 1 * sin(u * 12)\nx = r * cos(u)\nz = r * sin(u)\ny = v * 26",
-        ["Pyramidal Tent Canvas"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 24\nz = v * 24\ny = 12 - 12 * max(abs(u*2), abs(v*2))",
-        ["Geodesic Dome Patch"] = "local lat = acos(1 - ((i - 0.5) / n))\nlocal lon = i * 2.399963\nx = 16 * sin(lat) * cos(lon)\nz = 16 * sin(lat) * sin(lon)\ny = 16 * cos(lat)",
-        ["Ribbon Wave Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 30\nz = v * 10\ny = sin(u * 15) * 4",
-        ["Twisted Plane Sheet"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal twist = u * 2\nx = u * 26\nz = v * 20 * cos(twist)\ny = v * 20 * sin(twist)",
-        ["Extruded Star Shell"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal r = 12 + 4 * sin(u * 5)\nx = r * cos(u)\nz = r * sin(u)\ny = v * 24",
-        ["Accordion Fold Sheet"] = "local u = ((i - 1) % floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nlocal v = floor((i - 1) / floor(sqrt(n))) / max(1, floor(sqrt(n)) - 1) - 0.5\nx = u * 30\nz = v * 20\ny = abs((u * 40) % 4 - 2) - 1"
-    },
-    ["3D Surfaces: Advanced"] = {
-        ["Mobius Strip"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 6\nx = (12 + v * cos(u / 2)) * cos(u)\nz = (12 + v * cos(u / 2)) * sin(u)\ny = v * sin(u / 2)",
-        ["Klein Bottle Immersion"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal r = 4 * (1 - cos(u) / 2)\nlocal lx = (6 * cos(u) * (1 + sin(u)) + r * cos(u) * cos(v))\nlocal lz = (16 * sin(u) + r * sin(u) * cos(v))\nlocal ly = r * sin(v)\nx = lx\ny = lz - 6\nz = ly",
-        ["Boy's Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * pi\nlocal g1 = cos(u) * sin(v) local g2 = sin(u) * sin(v) local g3 = cos(v)\nx = 14 * (g1*g1 * cos(2*u) + sqrt(2)*g1*g3*cos(u)) / (2 - sqrt(2)*sin(2*u)*sin(3*v))\nz = 14 * (g1*g1 * sin(2*u) - sqrt(2)*g1*g3*sin(u)) / (2 - sqrt(2)*sin(2*u)*sin(3*v))\ny = 14 * (sqrt(3)*g1*g1) / (2 - sqrt(2)*sin(2*u)*sin(3*v)) - 6",
-        ["Roman Surface Steiner"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * pi\nx = 14 * sin(2*u) * sin(v)^2\nz = 14 * sin(u) * cos(2*v)\ny = 14 * cos(u) * sin(2*v)",
-        ["Cross-Cap Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * pi\nx = 14 * sin(u) * sin(2*v)\nz = 14 * sin(2*u) * cos(v)^2\ny = 14 * cos(2*u) * cos(v)^2",
-        ["Enneper Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nx = u - (u^3 / 3) + u * v^2\nz = v - (v^3 / 3) + v * u^2\ny = u^2 - v^2",
-        ["Scherk's First Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 2.8\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 2.8\nx = u * 5\nz = v * 5\ny = log(cos(v) / cos(u)) * 5",
-        ["Costa Minimal Cell"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 3\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 3\nx = 12 * cos(u) * cosh(v)\nz = 12 * sin(u) * cosh(v)\ny = 12 * v",
-        ["Gyroid Minimal Cell"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n))) * 4 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n))) * 4 * pi\nx = (u - 2*pi) * 2\nz = (v - 2*pi) * 2\ny = 5 * (sin(u) * cos(v) + sin(v) * cos(u))",
-        ["Schwarz P Minimal"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n))) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n))) * 2 * pi\nx = (u - pi) * 4\nz = (v - pi) * 4\ny = 4 * acos(-cos(u) - cos(v))",
-        ["Schwarz D Minimal"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n))) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n))) * 2 * pi\nx = (u - pi) * 4\nz = (v - pi) * 4\ny = 4 * acos(sin(u) * sin(v))",
-        ["Neovius Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n))) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n))) * 2 * pi\nx = (u - pi) * 4\nz = (v - pi) * 4\ny = 4 * acos(3 * (cos(u) + cos(v)) + 4 * cos(u) * cos(v))",
-        ["Kuen Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 6\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n))) * pi\nlocal d = 1 + u^2 * sin(v)^2\nx = 10 * (2*cos(v) + u*sin(v)) * sin(u) / d\nz = 10 * (2*cos(v) + u*sin(v)) * cos(u) / d\ny = 10 * (log(tan(v/2)) + 2*cos(v)/d)",
-        ["Breather Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 14\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 37.4\nlocal w = 0.4 local d = 1 - w^2\nx = 10 * (-u + (2*w^2*cosh(w*u)*sinh(w*u)) / (w^2*cosh(w*u)^2 + d*sin(w*v)^2))\nz = 10 * (2*w*d*cosh(w*u)*(-sqrt(d)*cos(w*v)*cos(sqrt(d)*v) - sin(w*v)*sin(sqrt(d)*v))) / (w^2*cosh(w*u)^2 + d*sin(w*v)^2)\ny = 10 * (2*w*d*cosh(w*u)*(-sqrt(d)*cos(w*v)*sin(sqrt(d)*v) + sin(w*v)*cos(sqrt(d)*v))) / (w^2*cosh(w*u)^2 + d*sin(w*v)^2)",
-        ["Dini's Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n))) * 4 * pi\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) + 0.01) * 2\nx = 10 * cos(u) * sin(v)\nz = 10 * sin(u) * sin(v)\ny = 10 * (cos(v) + log(tan(v/2))) + 2 * u",
-        ["Henneberg Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 2\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * pi\nx = 8 * (2*sinh(u)*cos(v) - (2/3)*sinh(3*u)*cos(3*v))\nz = 8 * (2*sinh(u)*sin(v) + (2/3)*sinh(3*u)*sin(3*v))\ny = 8 * 2*cosh(2*u)*cos(2*v)",
-        ["Bour's Minimal Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n))) * 2\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n))) * 4 * pi\nx = 10 * (u * cos(v) - (u^2 / 2) * cos(2*v))\nz = 10 * (-u * sin(v) - (u^2 / 2) * sin(2*v))\ny = 10 * (4/3) * u^1.5 * cos(1.5 * v)",
-        ["Richmond's Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n))) * 2\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n))) * 2 * pi\nx = 10 * (-1/2*u*cos(v) - 1/6*u^3*cos(3*v))\nz = 10 * (-1/2*u*sin(v) + 1/6*u^3*sin(3*v))\ny = 10 * u^2 * cos(2*v)",
-        ["Catalan's Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n))) * 4 * pi\nx = 8 * (u - sin(u)*cosh(v))\nz = 8 * (1 - cos(u)*cosh(v))\ny = 8 * (4*sin(u/2)*sinh(v/2))",
-        ["Twisted Heart Surface"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = (floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * pi\nx = 12 * cos(u) * (1 + cos(v))\nz = 12 * sin(u) * (1 + cos(v))\ny = 12 * sin(v) + u * 2",
-        ["Dupin Cyclide"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal a, b, c, d = 10, 8, 6, 4\nx = (d * (c - a*cos(u)*cos(v)) + b^2 * cos(u)) / (a - c*cos(u)*cos(v))\nz = (b * sin(u) * (a - d*cos(v))) / (a - c*cos(u)*cos(v))\ny = (b * sin(v) * (c*cos(u) - d)) / (a - c*cos(u)*cos(v))",
-        ["Calabi-Yau Cross-Section"] = "local u = ((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nlocal v = floor((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) * 2 * pi\nx = 10 * (cos(u) * cos(v) + sin(u) * sin(v) * cos(u * 3))\nz = 10 * (sin(u) * cos(v) - cos(u) * sin(v) * cos(v * 3))\ny = 6 * sin(u * v * 3)",
-        ["Togliatti Quintic"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nx = u * 10\nz = v * 10\ny = 10 * cos(u)*cos(v)*sin(u+v)",
-        ["Barth Sextic Surface"] = "local lat = acos(1 - 2 * ((i - 0.5) / n))\nlocal lon = i * 2.399963\nx = 12 * sin(lat) * cos(lon) * (1 + 0.3*cos(5*lon))\nz = 12 * sin(lat) * sin(lon) * (1 + 0.3*sin(5*lon))\ny = 12 * cos(lat)",
-        ["Kummer Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nx = u * 10\nz = v * 10\ny = 10 * (u^2 + v^2) * exp(-u^2 - v^2)",
-        ["Clebsch Cubic"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nx = u * 10\nz = v * 10\ny = 5 * (u^3 + v^3 - 3*u*v)",
-        ["Chmutov Surface"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 4\nx = u * 10\nz = v * 10\ny = 5 * (cos(u*pi) + cos(v*pi))",
-        ["Monkey Saddle"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 2\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 2\nx = u * 15\nz = v * 15\ny = 5 * (u^3 - 3 * u * v^2)",
-        ["Fish-Scale Wave"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 6\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 6\nx = u * 10\nz = v * 10\ny = 3 * (sin(u*2) * cos(v*2) + abs(cos(u*2)))",
-        ["Perlin Noise Terrain"] = "local u = (((i - 1) % floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 40\nlocal v = (((i - 1) / floor(sqrt(n))) / floor(sqrt(n)) - 0.5) * 40\nx = u\nz = v\ny = 4 * sin(u*0.2 + v*0.1) + 2 * cos(u*0.4 - v*0.3) + sin(u*0.8) * cos(v*0.8)"
-    }
+    {Name="Regular Pentagon", RawName="Regular Pentagon", Text="r = 14 * cos(pi / 5) / cos((theta % (2 * pi / 5)) - pi / 5)\nz = 0"},
+    {Name="Regular Hexagon", RawName="Regular Hexagon", Text="r = 14 * cos(pi / 6) / cos((theta % (2 * pi / 6)) - pi / 6)\nz = 0"},
+    {Name="Regular Heptagon", RawName="Regular Heptagon", Text="r = 14 * cos(pi / 7) / cos((theta % (2 * pi / 7)) - pi / 7)\nz = 0"},
+    {Name="Regular Octagon", RawName="Regular Octagon", Text="r = 14 * cos(pi / 8) / cos((theta % (2 * pi / 8)) - pi / 8)\nz = 0"},
+    {Name="Regular Nonagon", RawName="Regular Nonagon", Text="r = 14 * cos(pi / 9) / cos((theta % (2 * pi / 9)) - pi / 9)\nz = 0"},
+    {Name="Regular Decagon", RawName="Regular Decagon", Text="r = 14 * cos(pi / 10) / cos((theta % (2 * pi / 10)) - pi / 10)\nz = 0"},
+
+    {Name="Semicircle Outline", RawName="Semicircle Outline", Text="x = 15 * cos(theta / 2)\ny = 15 * sin(theta / 2)\nz = 0"},
+    {Name="Chevron Arrow", RawName="Chevron Arrow", Text="y = abs(cos(theta)) * 4 + sin(theta) * 12\nx = cos(theta) * 15\nz = 0"},
+    {Name="L-Block Profile", RawName="L-Block Profile", Text="x = (theta < pi) and max(-5, min(15, 20 * cos(theta))) or max(-15, min(-5, 20 * cos(theta)))\ny = (theta < pi/2 or theta > 3*pi/2) and max(-15, min(15, 20 * sin(theta))) or max(-15, min(-5, 20 * sin(theta)))\nz = 0"},
+    {Name="T-Block Profile", RawName="T-Block Profile", Text="y = max(-12, min(12, 16 * sin(theta)))\nx = (y > 4) and max(-16, min(16, 20 * cos(theta))) or max(-6, min(6, 20 * cos(theta)))\nz = 0"},
+    {Name="Cross Outline", RawName="Cross Outline", Text="r = 14 / max(abs(cos(2 * theta)), abs(sin(2 * theta))) * (1 - 0.25 * abs(sin(4 * theta)))\nz = 0"},
+
+    {Name="Low-Poly Circle", RawName="Low-Poly Circle", Text="x = 15 * cos(floor(theta * 12) / 12)\ny = 15 * sin(floor(theta * 12) / 12)\nz = 0"},
+    {Name="Ellipse", RawName="Ellipse", Text="x = 20 * cos(theta)\ny = 10 * sin(theta)\nz = 0"},
+    {Name="Symmetrical Oval", RawName="Symmetrical Oval", Text="x = 18 * cos(theta)\ny = 11 * sin(theta) * (1 + 0.1 * abs(cos(theta)))\nz = 0"},
+    {Name="Symmetrical Tear Drop", RawName="Symmetrical Tear Drop", Text="x = 14 * sin(theta)\ny = 16 * cos(theta) * (1 - 0.25 * sin(theta))\nz = 0"},
+    {Name="Crescent Moon", RawName="Crescent Moon", Text="x = 15 * cos(theta) - abs(cos(theta)) * 5\ny = 15 * sin(theta)\nz = 0"},
+
+    {Name="4-Pointed Star", RawName="4-Pointed Star", Text="r = 10 + sin(theta * 4) * 4\nz = 0"},
+    {Name="5-Pointed Star", RawName="5-Pointed Star", Text="r = 11 + sin(theta * 5) * 4\nz = 0"},
+    {Name="6-Pointed Star", RawName="6-Pointed Star", Text="r = 11 + sin(theta * 6) * 4\nz = 0"},
+
+    {Name="Rounded Rectangle Path", RawName="Rounded Rectangle Path", Text="x = max(-14, min(14, 18 * cos(theta))) + 2 * cos(theta)^3\ny = max(-9, min(9, 13 * sin(theta))) + 2 * sin(theta)^3\nz = 0"}
 }
 
-return MathPresets
+["2D Shapes: Advanced"] = {
+    {Name="Reuleaux Triangle", RawName="Reuleaux Triangle", Text="r = 13 * (1 + 0.08 * cos(theta * 3))\nz = 0"},
+    {Name="Lemniscate Loop", RawName="Lemniscate Loop", Text="r = 16 * sqrt(abs(cos(2 * theta)))\nz = 0"},
+    {Name="Archimedean Spiral", RawName="Archimedean Spiral", Text="r = 0.4 * theta * 4\nz = 0"},
+    {Name="Logarithmic Spiral", RawName="Logarithmic Spiral", Text="r = 2 * exp(0.15 * theta)\nz = 0"},
+    {Name="Astroid", RawName="Astroid", Text="x = 15 * cos(theta)^3\ny = 15 * sin(theta)^3\nz = 0"},
+
+    {Name="Deltoid Curve", RawName="Deltoid Curve", Text="x = 5 * (2 * cos(theta) + cos(2 * theta))\ny = 5 * (2 * sin(theta) - sin(2 * theta))\nz = 0"},
+    {Name="Cardioid Heart", RawName="Cardioid Heart", Text="r = 10 * (1 - sin(theta))\nz = 0"},
+    {Name="Nephroid", RawName="Nephroid", Text="x = 4 * (3 * cos(theta) - cos(3 * theta))\ny = 4 * (3 * sin(theta) - sin(3 * theta))\nz = 0"},
+    {Name="Limacon of Pascal", RawName="Limacon of Pascal", Text="r = 6 + 10 * cos(theta)\nz = 0"},
+
+    {Name="3-Petaled Rose", RawName="3-Petaled Rose", Text="r = 15 * cos(theta * 3)\nz = 0"},
+    {Name="4-Petaled Rose", RawName="4-Petaled Rose", Text="r = 15 * cos(theta * 4)\nz = 0"},
+
+    {Name="Lissajous (1:2)", RawName="Lissajous (1:2)", Text="x = 15 * sin(theta)\ny = 15 * sin(2 * theta)\nz = 0"},
+    {Name="Lissajous (3:4)", RawName="Lissajous (3:4)", Text="x = 15 * sin(3 * theta)\ny = 15 * sin(4 * theta)\nz = 0"},
+
+    {Name="Hypotrochoid Profile", RawName="Hypotrochoid Profile", Text="x = 11 * cos(theta) + 5 * cos(2.5 * theta)\ny = 11 * sin(theta) - 5 * sin(2.5 * theta)\nz = 0"},
+    {Name="Epitrochoid Profile", RawName="Epitrochoid Profile", Text="x = 10 * cos(theta) - 4 * cos(3.5 * theta)\ny = 10 * sin(theta) - 4 * sin(3.5 * theta)\nz = 0"},
+
+    {Name="Koch Snowflake Outline", RawName="Koch Snowflake Outline", Text="r = 13 * (1 + 0.12 * cos(theta * 3))\nz = 0"},
+    {Name="Dragon Curve Segment", RawName="Dragon Curve Segment", Text="x = 14 * (theta / pi) * cos(theta * 2.5)\ny = 14 * (theta / pi) * sin(theta * 2.5)\nz = 0"},
+
+    {Name="Folium of Descartes", RawName="Folium of Descartes", Text="r = 25 * 3 * sin(theta) * cos(theta) / (abs(cos(theta)^3 + sin(theta)^3) + 0.1)\nz = 0"},
+    {Name="Cissoid of Diocles", RawName="Cissoid of Diocles", Text="r = 15 * sin(theta)^2 / (abs(cos(theta)) + 0.1)\nz = 0"},
+    {Name="Strophoid Outline", RawName="Strophoid Outline", Text="r = 14 * cos(2 * theta) / (abs(cos(theta)) + 0.1)\nz = 0"},
+
+    {Name="Cassini Oval", RawName="Cassini Oval", Text="r = 15 * sqrt(abs(cos(2 * theta)))\nz = 0"},
+    {Name="Watt's Curve", RawName="Watt's Curve", Text="r = 15 * sqrt(0.8 + 0.4 * cos(2 * theta))\nz = 0"},
+
+    {Name="Butterfly Curve", RawName="Butterfly Curve", Text="r = exp(cos(theta)) - 2 * cos(4 * theta)\nz = 0"},
+
+    {Name="8-Teeth Gear", RawName="8-Teeth Gear", Text="r = 13 + sin(theta * 8) * 1.8\nz = 0"},
+    {Name="Maltese Cross", RawName="Maltese Cross", Text="r = 15 * (abs(cos(2 * theta)) > 0.7 and 1 or 0.7)\nz = 0"},
+    {Name="Sine Wave Ring", RawName="Sine Wave Ring", Text="r = 14 + sin(theta * 14) * 1.2\nz = 0"},
+    {Name="Superellipse Squircle", RawName="Superellipse Squircle", Text="r = 15 / (abs(cos(theta))^3.5 + abs(sin(theta))^3.5)^(1/3.5)\nz = 0"},
+
+    {Name="Egg Curve", RawName="Egg Curve", Text="x = 14 * cos(theta)\ny = 18 * sin(theta) * (1 + 0.2 * sin(theta))\nz = 0"},
+    {Name="Vesica Piscis", RawName="Vesica Piscis", Text="x = 15 * cos(theta)\ny = 10 * sin(theta) * abs(sin(theta))\nz = 0"},
+    {Name="Bezier Quad Path", RawName="Bezier Quad Path", Text="x = (1-(i/n))^2*-15 + 2*(1-(i/n))*(i/n)*5 + (i/n)^2*15\ny = (1-(i/n))^2*-10 + 2*(1-(i/n))*(i/n)*20 + (i/n)^2*-10\nz = 0"}
+}
+
+["2D Surfaces: Basic"] = {
+
+    {Name="Triangular Patch", RawName="Triangular Patch", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Triangular Patch")},
+    {Name="Square Plane", RawName="Square Plane", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Square Plane")},
+    {Name="Rectangular Face", RawName="Rectangular Face", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Rectangular Face")},
+    {Name="Parallelogram Sheet", RawName="Parallelogram Sheet", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Parallelogram Sheet")},
+    {Name="Trapezoidal Sheet", RawName="Trapezoidal Sheet", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Trapezoidal Sheet")},
+
+    {Name="Circular Sector", RawName="Circular Sector", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Circular Sector")},
+    {Name="Circular Segment", RawName="Circular Segment", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Circular Segment")},
+    {Name="Annulus Flat Ring", RawName="Annulus Flat Ring", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Annulus Flat Ring")},
+    {Name="Elliptic Disk", RawName="Elliptic Disk", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Elliptic Disk")},
+    {Name="Semicircular Plate", RawName="Semicircular Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Semicircular Plate")},
+
+    {Name="Pentagonal Disk", RawName="Pentagonal Disk", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Pentagonal Disk")},
+    {Name="Hexagonal Disk", RawName="Hexagonal Disk", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Hexagonal Disk")},
+    {Name="Octagonal Disk", RawName="Octagonal Disk", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Octagonal Disk")},
+    {Name="Quadrant Face", RawName="Quadrant Face", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Quadrant Face")},
+    {Name="L-Shape Plane Mesh", RawName="L-Shape Plane Mesh", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","L-Shape Plane Mesh")},
+
+    {Name="T-Shape Plane Mesh", RawName="T-Shape Plane Mesh", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","T-Shape Plane Mesh")},
+    {Name="H-Shape Plane Mesh", RawName="H-Shape Plane Mesh", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","H-Shape Plane Mesh")},
+    {Name="Cross Surface", RawName="Cross Surface", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Cross Surface")},
+    {Name="Chevron Face", RawName="Chevron Face", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Chevron Face")},
+    {Name="Diamond Plate Face", RawName="Diamond Plate Face", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Diamond Plate Face")},
+
+    {Name="Sheared Ribbon Face", RawName="Sheared Ribbon Face", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Sheared Ribbon Face")},
+    {Name="Grid Quadrant", RawName="Grid Quadrant", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Grid Quadrant")},
+    {Name="Rounded Corner Patch", RawName="Rounded Corner Patch", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Rounded Corner Patch")},
+    {Name="Chamfer Surface", RawName="Chamfer Surface", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Chamfer Surface")},
+    {Name="Heart Face Solid", RawName="Heart Face Solid", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Heart Face Solid")},
+
+    {Name="Star Face Solid", RawName="Star Face Solid", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Star Face Solid")},
+    {Name="Crescent Plate", RawName="Crescent Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Crescent Plate")},
+    {Name="Regular Decagon Face", RawName="Regular Decagon Face", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Regular Decagon Face")},
+    {Name="Vesica Piscis Plate", RawName="Vesica Piscis Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Vesica Piscis Plate")},
+    {Name="Concentric Disk Ring", RawName="Concentric Disk Ring", Text=getPreciseFormulaBlueprint("2D Surfaces: Basic","Concentric Disk Ring")},
+
+}
+
+["2D Surfaces: Advanced"] = {
+
+    {Name="Bilinear Bezier", RawName="Bilinear Bezier", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Bilinear Bezier")},
+    {Name="Biquadratic Bezier", RawName="Biquadratic Bezier", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Biquadratic Bezier")},
+    {Name="Bicubic Surface Patch", RawName="Bicubic Surface Patch", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Bicubic Surface Patch")},
+    {Name="Flat NURBS Mesh", RawName="Flat NURBS Mesh", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Flat NURBS Mesh")},
+    {Name="Sine Ripple Flat Disk", RawName="Sine Ripple Flat Disk", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Sine Ripple Flat Disk")},
+
+    {Name="Parabolic Plane Slice", RawName="Parabolic Plane Slice", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Parabolic Plane Slice")},
+    {Name="Hyperbolic Sheet Segment", RawName="Hyperbolic Sheet Segment", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Hyperbolic Sheet Segment")},
+    {Name="Logarithmic Surface", RawName="Logarithmic Surface", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Logarithmic Surface")},
+    {Name="Gaussian Curve Plane", RawName="Gaussian Curve Plane", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Gaussian Curve Plane")},
+    {Name="Flat Voronoi Cell", RawName="Flat Voronoi Cell", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Flat Voronoi Cell")},
+
+    {Name="Delaunay Triangle Patch", RawName="Delaunay Triangle Patch", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Delaunay Triangle Patch")},
+    {Name="Fractured Polygon Plate", RawName="Fractured Polygon Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Fractured Polygon Plate")},
+    {Name="Superelliptic Disk", RawName="Superelliptic Disk", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Superelliptic Disk")},
+    {Name="Perforated Plate", RawName="Perforated Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Perforated Plate")},
+    {Name="Archimedean Spiral Band", RawName="Archimedean Spiral Band", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Archimedean Spiral Band")},
+
+    {Name="Cardioid Solid Mesh", RawName="Cardioid Solid Mesh", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Cardioid Solid Mesh")},
+    {Name="Astroid Solid Mesh", RawName="Astroid Solid Mesh", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Astroid Solid Mesh")},
+    {Name="Lemniscate Solid Plate", RawName="Lemniscate Solid Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Lemniscate Solid Plate")},
+    {Name="Rose Curve Solid (3P)", RawName="Rose Curve Solid (3P)", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Rose Curve Solid (3P)")},
+    {Name="Rose Curve Solid (4P)", RawName="Rose Curve Solid (4P)", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Rose Curve Solid (4P)")},
+
+    {Name="Lissajous Filled Weave", RawName="Lissajous Filled Weave", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Lissajous Filled Weave")},
+    {Name="Koch Snowflake Solid", RawName="Koch Snowflake Solid", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Koch Snowflake Solid")},
+    {Name="Topology Optimized Plate", RawName="Topology Optimized Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Topology Optimized Plate")},
+    {Name="Concentric Web Patch", RawName="Concentric Web Patch", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Concentric Web Patch")},
+    {Name="Gear Face with Hub", RawName="Gear Face with Hub", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Gear Face with Hub")},
+
+    {Name="Deltoid Solid Plate", RawName="Deltoid Solid Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Deltoid Solid Plate")},
+    {Name="Nephroid Solid Plate", RawName="Nephroid Solid Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Nephroid Solid Plate")},
+    {Name="Limacon Looped Plate", RawName="Limacon Looped Plate", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Limacon Looped Plate")},
+    {Name="Chevron Herringbone", RawName="Chevron Herringbone", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Chevron Herringbone")},
+    {Name="Custom Flat Spline", RawName="Custom Flat Spline", Text=getPreciseFormulaBlueprint("2D Surfaces: Advanced","Custom Flat Spline")},
+
+}
+
+["3D Shapes: Basic"] = {
+    {Name="Cube", RawName="Cube", Text="local side = floor(n^(1/3))\nlocal dx = (i - 1) % side\nlocal dy = floor(((i - 1) % (side^2)) / side)\nlocal dz = floor((i - 1) / (side^2))\nx = (dx / max(1, side - 1) - 0.5) * 20\ny = (dy / max(1, side - 1) - 0.5) * 20\nz = (dz / max(1, side - 1) - 0.5) * 20"},
+
+    {Name="Rectangular Prism", RawName="Rectangular Prism", Text="local side = floor(n^(1/3))\nx = ((i % side)/side - 0.5) * 20\ny = ((floor(i/side) % side)/side - 0.5) * 14\nz = ((floor(i/(side^2)) % side)/side - 0.5) * 24"},
+
+    {Name="Triangular Prism", RawName="Triangular Prism", Text="local lay = floor((i - 1) / (n / 5))\nlocal sub = (i - 1) % (n / 5)\nlocal theta = (sub / (n / 5)) * 2 * pi\nx = 10 * cos(theta)\nz = 10 * sin(theta)\ny = (lay / 4 - 0.5) * 22"},
+
+    {Name="Pentagonal Prism", RawName="Pentagonal Prism", Text="local layer = floor((i - 1)/(n/6))\nlocal sub = (i - 1)%(n/6)\nlocal theta = sub/(n/6)*2*pi\nx = 12*cos(theta)\nz = 12*sin(theta)\ny = (layer/5 - 0.5)*22"},
+
+    {Name="Hexagonal Prism", RawName="Hexagonal Prism", Text="local layer = floor((i - 1)/(n/6))\nlocal sub = (i - 1)%(n/6)\nlocal theta = sub/(n/6)*2*pi\nx = 11*cos(theta)\nz = 11*sin(theta)\ny = (layer/5 - 0.5)*22"},
+
+    {Name="Octagonal Prism", RawName="Octagonal Prism", Text="local layer = floor((i - 1)/(n/8))\nlocal sub = (i - 1)%(n/8)\nlocal theta = sub/(n/8)*2*pi\nx = 13*cos(theta)\nz = 13*sin(theta)\ny = (layer/6 - 0.5)*24"},
+
+    {Name="Square Pyramid", RawName="Square Pyramid", Text="local h = floor((i - 1)/(n/6))\nlocal sub = (i - 1)%(n/6)\nlocal theta = sub/(n/6)*2*pi\nlocal scale = max(0,1 - h/5)\nx = scale*14*cos(theta)\nz = scale*14*sin(theta)\ny = (h/5 - 0.5)*18"},
+
+    {Name="Tetrahedron", RawName="Tetrahedron", Text="local t = (i/n)*pi*2\nx = 12*sin(t)\ny = 12*cos(t)\nz = 12*sin(2*t)"},
+
+    {Name="Pentagonal Pyramid", RawName="Pentagonal Pyramid", Text="local h = floor((i - 1)/(n/6))\nlocal sub = (i - 1)%(n/6)\nlocal theta = sub/(n/6)*2*pi\nlocal scale = max(0,1 - h/5)\nx = scale*13*cos(theta)\nz = scale*13*sin(theta)\ny = (h/5 - 0.5)*20"},
+
+    {Name="Hexagonal Pyramid", RawName="Hexagonal Pyramid", Text="local h = floor((i - 1)/(n/6))\nlocal sub = (i - 1)%(n/6)\nlocal theta = sub/(n/6)*2*pi\nlocal scale = max(0,1 - h/5)\nx = scale*12*cos(theta)\nz = scale*12*sin(theta)\ny = (h/5 - 0.5)*22"},
+
+    {Name="Octahedron", RawName="Octahedron", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 12*sin(lat)*cos(lon)\ny = 12*cos(lat)\nz = 12*sin(lat)*sin(lon)"},
+
+    {Name="Dodecahedron", RawName="Dodecahedron", Text="local t = (i/n)*2*pi\nx = 13*cos(t) + cos(5*t)\ny = 13*sin(t)\nz = 13*cos(3*t)"},
+
+    {Name="Icosahedron", RawName="Icosahedron", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 13*sin(lat)*cos(lon)\ny = 13*cos(lat)\nz = 13*sin(lat)*sin(lon)"},
+
+    {Name="Low-Poly Cone", RawName="Low-Poly Cone", Text="local layer = floor((i - 1)/(n/10))\nlocal sub = (i - 1)%(n/10)\nlocal theta = sub/(n/10)*2*pi\nlocal scale = layer/10\nx = scale*12*cos(theta)\nz = scale*12*sin(theta)\ny = (layer/10)*20"},
+
+    {Name="Low-Poly Cylinder", RawName="Low-Poly Cylinder", Text="local layer = floor((i - 1)/(n/12))\nlocal sub = (i - 1)%(n/12)\nlocal theta = sub/(n/12)*2*pi\nx = 12*cos(theta)\nz = 12*sin(theta)\ny = (layer/12 - 0.5)*24"},
+
+    {Name="Low-Poly Sphere", RawName="Low-Poly Sphere", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 15*sin(lat)*cos(lon)\ny = 15*cos(lat)\nz = 15*sin(lat)*sin(lon)"},
+
+    {Name="Wedge", RawName="Wedge", Text="x = ((i%n)/n - 0.5)*20\ny = ((i/n) - 0.5)*20\nz = ((i%n)/n)*10"},
+
+    {Name="Corner Wedge", RawName="Corner Wedge", Text="x = ((i%n)/n - 0.5)*20\ny = ((i/n) - 0.5)*20\nz = ((i/n)^2)*10"},
+
+    {Name="Cone Frustum", RawName="Cone Frustum", Text="local t = (i/n)*2*pi\nlocal r = 8 + (i/n)*6\nx = r*cos(t)\nz = r*sin(t)\ny = (i/n - 0.5)*20"},
+
+    {Name="Pyramid Frustum", RawName="Pyramid Frustum", Text="local t = (i/n)*2*pi\nlocal scale = 1 - (i/n)*0.5\nx = scale*12*cos(t)\nz = scale*12*sin(t)\ny = (i/n - 0.5)*20"},
+
+    {Name="Oblique Cylinder", RawName="Oblique Cylinder", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + (i/n)*5\nz = 12*sin(t)\ny = (i/n - 0.5)*24"},
+
+    {Name="Oblique Cone", RawName="Oblique Cone", Text="local t = (i/n)*2*pi\nlocal s = (i/n)\nx = s*12*cos(t) + s*4\nz = s*12*sin(t)\ny = s*22"},
+
+    {Name="Triangular Antiprism", RawName="Triangular Antiprism", Text="local t = (i/n)*2*pi\nx = 10*cos(t)\nz = 10*sin(t)\ny = sin(t*3)*6"},
+
+    {Name="Square Antiprism", RawName="Square Antiprism", Text="local t = (i/n)*2*pi\nx = 11*cos(t)\nz = 11*sin(t)\ny = sin(t*4)*6"},
+
+    {Name="Torus Donut", RawName="Torus Donut", Text="local u = (i/n)*2*pi\nlocal v = (i%n)/n*2*pi\nx = (12 + 4*cos(v))*cos(u)\nz = (12 + 4*cos(v))*sin(u)\ny = 4*sin(v)"},
+
+    {Name="Capsule", RawName="Capsule", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 10*sin(lat)*cos(lon)\nz = 10*sin(lat)*sin(lon)\ny = 10*cos(lat)"},
+
+    {Name="Bicone", RawName="Bicone", Text="local t = (i/n)*2*pi\nx = 12*cos(t)\nz = 12*sin(t)\ny = abs(sin(t))*10"},
+
+    {Name="Prolate Spheroid", RawName="Prolate Spheroid", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 10*sin(lat)*cos(lon)\nz = 10*sin(lat)*sin(lon)\ny = 16*cos(lat)"},
+
+    {Name="Oblate Spheroid", RawName="Oblate Spheroid", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 16*sin(lat)*cos(lon)\nz = 16*sin(lat)*sin(lon)\ny = 10*cos(lat)"}
+}
+
+["3D Shapes: Advanced"] = {
+    {Name="Truncated Tetrahedron", RawName="Truncated Tetrahedron", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nlocal r = 14*(1 - 0.2*abs(cos(3*lon)*sin(3*lat)))\nx = r*sin(lat)*cos(lon)\ny = r*cos(lat)\nz = r*sin(lat)*sin(lon)"},
+
+    {Name="Cuboctahedron", RawName="Cuboctahedron", Text="local t = (i/n)*2*pi\nx = 12*(cos(t) + cos(2*t))\ny = 12*(sin(t) + sin(2*t))\nz = 12*cos(3*t)"},
+
+    {Name="Truncated Cube", RawName="Truncated Cube", Text="local t = (i/n)*2*pi\nx = 13*cos(t) + cos(3*t)\ny = 13*sin(t)\nz = 13*cos(2*t)"},
+
+    {Name="Truncated Octahedron", RawName="Truncated Octahedron", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 13*sin(lat)*cos(lon)\ny = 13*cos(lat)\nz = 13*sin(lat)*sin(lon)"},
+
+    {Name="Rhombicuboctahedron", RawName="Rhombicuboctahedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + 6*cos(2*t)\ny = 12*sin(t) + 6*sin(2*t)\nz = 6*cos(4*t)"},
+
+    {Name="Icosidodecahedron", RawName="Icosidodecahedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + 5*cos(5*t)\ny = 12*sin(t)\nz = 5*sin(3*t)"},
+
+    {Name="Truncated Dodecahedron", RawName="Truncated Dodecahedron", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 14*sin(lat)*cos(lon)\ny = 14*cos(lat)\nz = 14*sin(lat)*sin(lon)"},
+
+    {Name="Truncated Icosahedron", RawName="Truncated Icosahedron", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nlocal r = 15*(1 - 0.05*abs(cos(5*lon)*sin(5*lat)))\nx = r*sin(lat)*cos(lon)\ny = r*cos(lat)\nz = r*sin(lat)*sin(lon)"},
+
+    {Name="Rhombicosidodecahedron", RawName="Rhombicosidodecahedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + 4*cos(3*t)\ny = 12*sin(t) + 4*sin(5*t)\nz = 4*cos(7*t)"},
+
+    {Name="Snub Cube", RawName="Snub Cube", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + 3*cos(4*t)\ny = 12*sin(t)\nz = 3*sin(6*t)"},
+
+    {Name="Snub Dodecahedron", RawName="Snub Dodecahedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + 4*cos(5*t)\ny = 12*sin(t) + 2*sin(7*t)\nz = 4*cos(9*t)"},
+
+    {Name="Small Stellated Dodecahedron", RawName="Small Stellated Dodecahedron", Text="local t = (i/n)*2*pi\nx = 14*cos(t)*(1 + 0.3*cos(5*t))\ny = 14*sin(t)\nz = 14*cos(3*t)"},
+
+    {Name="Great Stellated Dodecahedron", RawName="Great Stellated Dodecahedron", Text="local t = (i/n)*2*pi\nx = 15*cos(t)*(1 + 0.5*cos(7*t))\ny = 15*sin(t)\nz = 15*cos(5*t)"},
+
+    {Name="Rhombic Dodecahedron", RawName="Rhombic Dodecahedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t)*(1 + abs(cos(t)))\ny = 12*sin(t)\nz = 12*cos(2*t)"},
+
+    {Name="Triakis Octahedron", RawName="Triakis Octahedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + cos(3*t)\ny = 12*sin(t) + sin(3*t)\nz = 12*cos(2*t)"},
+
+    {Name="Hypercube Projection", RawName="Hypercube Projection", Text="local u = (i/n)*2*pi\nx = 12*cos(u)*cos(2*u)\ny = 12*sin(u)*cos(2*u)\nz = 12*sin(2*u)"},
+
+    {Name="Gomboc Approximation", RawName="Gomboc Approximation", Text="local t = (i/n)*2*pi\nx = 12*cos(t)\ny = 12*sin(t)\nz = 12*(cos(t)^3)"},
+
+    {Name="Reuleaux Tetrahedron", RawName="Reuleaux Tetrahedron", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 12*sin(lat)*cos(lon)\ny = 12*cos(lat)\nz = 12*sin(lat)*sin(lon)"},
+
+    {Name="Scutoid", RawName="Scutoid", Text="local h = (i/n)\nlocal t = (i/n)*2*pi\nx = 12*cos(t)*(1 + h*0.2)\ny = h*24 - 12\nz = 12*sin(t)"},
+
+    {Name="Oloid", RawName="Oloid", Text="local u = (i/n)*2*pi\nlocal c = cos(u) local s = sin(u)\nx = 15*(c/(1 + s*s))\ny = 15*(s*c/(1 + s*s))\nz = 15*(s/(1 + s*s))"},
+
+    {Name="Sphericon", RawName="Sphericon", Text="local phi = (i/n)*2*pi\nx = 14*cos(phi)*abs(cos(phi))\ny = 14*sin(phi)\nz = 14*cos(phi)*abs(sin(phi))"},
+
+    {Name="Hexagonal Bifrustum", RawName="Hexagonal Bifrustum", Text="local t = (i/n)*2*pi\nlocal s = (i/n)\nx = (10 + s*4)*cos(t)\nz = (10 + s*4)*sin(t)\ny = (s - 0.5)*20"},
+
+    {Name="Twisted Prism", RawName="Twisted Prism", Text="local t = (i/n)*2*pi\nx = 12*cos(t + (i/n)*pi)\nz = 12*sin(t + (i/n)*pi)\ny = (i/n - 0.5)*24"},
+
+    {Name="Gyroelongated Pyramid", RawName="Gyroelongated Pyramid", Text="local t = (i/n)*2*pi\nlocal s = (i/n)\nx = s*12*cos(t)\nz = s*12*sin(t)\ny = s*22 + sin(t*3)*2"},
+
+    {Name="Csaszar Polyhedron", RawName="Csaszar Polyhedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + cos(4*t)\ny = 12*sin(t) + sin(5*t)\nz = 12*cos(6*t)"},
+
+    {Name="Szilassi Polyhedron", RawName="Szilassi Polyhedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t) + cos(7*t)\ny = 12*sin(t)\nz = 12*sin(5*t)"},
+
+    {Name="Jessen's Icosahedron", RawName="Jessen's Icosahedron", Text="local lat = acos(1 - 2*((i-0.5)/n))\nlocal lon = i*2.399963\nx = 13*sin(lat)*cos(lon)\ny = 13*cos(lat)\nz = 13*sin(lat)*sin(lon)"},
+
+    {Name="Schonhardt Polyhedron", RawName="Schonhardt Polyhedron", Text="local t = (i/n)*2*pi\nx = 12*cos(t)\ny = 12*sin(t)\nz = 12*sin(t*3)"},
+
+    {Name="Character Shell Blueprint", RawName="Character Shell Blueprint", Text="local t = (i/n)*2*pi\nx = 12*cos(t)\ny = 12*sin(t)\nz = 6*sin(2*t)"},
+
+    {Name="Procedural Voxel Cluster", RawName="Procedural Voxel Cluster", Text="local x = ((i%10)-5)\nlocal y = ((i%20)-10)/2\nlocal z = ((i%15)-7)\nx = x*2\ny = y*2\nz = z*2"}
+}
+
+["3D Surfaces: Basic"] = {
+
+    {Name="Open Cylinder Pipe", RawName="Open Cylinder Pipe", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Open Cylinder Pipe")},
+    {Name="Open Cone Funnel", RawName="Open Cone Funnel", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Open Cone Funnel")},
+    {Name="Hemispherical Bowl", RawName="Hemispherical Bowl", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Hemispherical Bowl")},
+    {Name="Paraboloid Dish", RawName="Paraboloid Dish", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Paraboloid Dish")},
+    {Name="Hyperboloid One Sheet", RawName="Hyperboloid One Sheet", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Hyperboloid One Sheet")},
+
+    {Name="Hyperboloid Two Sheets", RawName="Hyperboloid Two Sheets", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Hyperboloid Two Sheets")},
+    {Name="Elliptic Paraboloid", RawName="Elliptic Paraboloid", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Elliptic Paraboloid")},
+    {Name="Hyperbolic Paraboloid", RawName="Hyperbolic Paraboloid", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Hyperbolic Paraboloid")},
+    {Name="Toroidal Section", RawName="Toroidal Section", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Toroidal Section")},
+    {Name="Corrugated Sheet", RawName="Corrugated Sheet", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Corrugated Sheet")},
+
+    {Name="Helical Spring Surface", RawName="Helical Spring Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Helical Spring Surface")},
+    {Name="Spiral Architecture Ramp", RawName="Spiral Architecture Ramp", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Spiral Architecture Ramp")},
+    {Name="Catenoid Minimal Surface", RawName="Catenoid Minimal Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Catenoid Minimal Surface")},
+    {Name="Helicoid Minimal Surface", RawName="Helicoid Minimal Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Helicoid Minimal Surface")},
+    {Name="Funnel Web Surface", RawName="Funnel Web Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Funnel Web Surface")},
+
+    {Name="Gabriel's Horn Trumpet", RawName="Gabriel's Horn Trumpet", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Gabriel's Horn Trumpet")},
+    {Name="Cylindrical Wedge Shell", RawName="Cylindrical Wedge Shell", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Cylindrical Wedge Shell")},
+    {Name="Conical Frustum Shell", RawName="Conical Frustum Shell", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Conical Frustum Shell")},
+    {Name="Spherical Cap", RawName="Spherical Cap", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Spherical Cap")},
+    {Name="Spherical Zone", RawName="Spherical Zone", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Spherical Zone")},
+
+    {Name="Barrel Surface Shell", RawName="Barrel Surface Shell", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Barrel Surface Shell")},
+    {Name="Pillow Surface", RawName="Pillow Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Pillow Surface")},
+    {Name="Half-Pipe Trough", RawName="Half-Pipe Trough", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Half-Pipe Trough")},
+    {Name="Fluted Column Surface", RawName="Fluted Column Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Fluted Column Surface")},
+    {Name="Pyramidal Tent Canvas", RawName="Pyramidal Tent Canvas", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Pyramidal Tent Canvas")},
+
+    {Name="Geodesic Dome Patch", RawName="Geodesic Dome Patch", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Geodesic Dome Patch")},
+    {Name="Ribbon Wave Surface", RawName="Ribbon Wave Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Ribbon Wave Surface")},
+    {Name="Twisted Plane Sheet", RawName="Twisted Plane Sheet", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Twisted Plane Sheet")},
+    {Name="Extruded Star Shell", RawName="Extruded Star Shell", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Extruded Star Shell")},
+    {Name="Accordion Fold Sheet", RawName="Accordion Fold Sheet", Text=getPreciseFormulaBlueprint("3D Surfaces: Basic","Accordion Fold Sheet")},
+
+}
+
+["3D Surfaces: Advanced"] = {
+
+    {Name="Mobius Strip", RawName="Mobius Strip", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Mobius Strip")},
+    {Name="Klein Bottle Immersion", RawName="Klein Bottle Immersion", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Klein Bottle Immersion")},
+    {Name="Boy's Surface", RawName="Boy's Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Boy's Surface")},
+    {Name="Roman Surface Steiner", RawName="Roman Surface Steiner", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Roman Surface Steiner")},
+    {Name="Cross-Cap Surface", RawName="Cross-Cap Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Cross-Cap Surface")},
+
+    {Name="Enneper Surface", RawName="Enneper Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Enneper Surface")},
+    {Name="Scherk's First Surface", RawName="Scherk's First Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Scherk's First Surface")},
+    {Name="Costa Minimal Cell", RawName="Costa Minimal Cell", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Costa Minimal Cell")},
+    {Name="Gyroid Minimal Cell", RawName="Gyroid Minimal Cell", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Gyroid Minimal Cell")},
+    {Name="Schwarz P Minimal", RawName="Schwarz P Minimal", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Schwarz P Minimal")},
+
+    {Name="Schwarz D Minimal", RawName="Schwarz D Minimal", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Schwarz D Minimal")},
+    {Name="Neovius Surface", RawName="Neovius Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Neovius Surface")},
+    {Name="Kuen Surface", RawName="Kuen Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Kuen Surface")},
+    {Name="Breather Surface", RawName="Breather Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Breather Surface")},
+    {Name="Dini's Surface", RawName="Dini's Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Dini's Surface")},
+
+    {Name="Henneberg Surface", RawName="Henneberg Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Henneberg Surface")},
+    {Name="Bour's Minimal Surface", RawName="Bour's Minimal Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Bour's Minimal Surface")},
+    {Name="Richmond's Surface", RawName="Richmond's Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Richmond's Surface")},
+    {Name="Catalan's Surface", RawName="Catalan's Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Catalan's Surface")},
+    {Name="Twisted Heart Surface", RawName="Twisted Heart Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Twisted Heart Surface")},
+
+    {Name="Dupin Cyclide", RawName="Dupin Cyclide", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Dupin Cyclide")},
+    {Name="Calabi-Yau Cross-Section", RawName="Calabi-Yau Cross-Section", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Calabi-Yau Cross-Section")},
+    {Name="Togliatti Quintic", RawName="Togliatti Quintic", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Togliatti Quintic")},
+    {Name="Barth Sextic Surface", RawName="Barth Sextic Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Barth Sextic Surface")},
+    {Name="Kummer Surface", RawName="Kummer Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Kummer Surface")},
+
+    {Name="Clebsch Cubic", RawName="Clebsch Cubic", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Clebsch Cubic")},
+    {Name="Chmutov Surface", RawName="Chmutov Surface", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Chmutov Surface")},
+    {Name="Monkey Saddle", RawName="Monkey Saddle", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Monkey Saddle")},
+    {Name="Fish-Scale Wave", RawName="Fish-Scale Wave", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Fish-Scale Wave")},
+    {Name="Perlin Noise Terrain", RawName="Perlin Noise Terrain", Text=getPreciseFormulaBlueprint("3D Surfaces: Advanced","Perlin Noise Terrain")},
+
+}
+}
