@@ -1,0 +1,498 @@
+-- // --- [AIRWALK(AW) GUI INITIALIZATION] ---
+local coreGui = game:GetService("CoreGui")
+if coreGui:FindFirstChild("Airwalk(AW) Gui") then 
+    coreGui["Airwalk(AW) Gui"]:Destroy() 
+end
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local player = Players.LocalPlayer
+
+-- Lifecycle management to prevent memory leaks
+local scriptActive = true
+local activeConnections = {}
+
+local function trackConnection(conn)
+    table.insert(activeConnections, conn)
+    return conn
+end
+
+-- High-Performance Noclip Part Caching System
+local noclipParts = {}
+local descAddedConn = nil
+
+local function cacheCharacterParts(char)
+    table.clear(noclipParts)
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then table.insert(noclipParts, part) end
+    end
+    if descAddedConn then descAddedConn:Disconnect() end
+    descAddedConn = char.DescendantAdded:Connect(function(desc)
+        if desc:IsA("BasePart") then table.insert(noclipParts, desc) end
+    end)
+end
+
+trackConnection(player.CharacterAdded:Connect(cacheCharacterParts))
+if player.Character then cacheCharacterParts(player.Character) end
+
+-- // --- [STATE VARIABLES] ---
+local airwalkEnabled = false
+local noclipEnabled = false
+local tpWalkEnabled = false
+local airwalkY = 0
+local airwalkPart = nil
+local manualMovingUp = false
+local manualMovingDown = false
+
+-- Configurable Parameters (With Adaptive Presets)
+local tpwChoices = {0.3, 0.5, 1, 2, 5}
+local tpwIndex = 3 -- Default to 1
+local tpwSpeed = tpwChoices[tpwIndex]
+
+local yTpChoices = {50, 100, 500}
+local yTpIndex = 2 -- Default to 100
+local yTpDiff = yTpChoices[yTpIndex]
+
+-- // --- [GUI FRAMEWORK CONSTRUCTION] ---
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "Airwalk(AW) Gui"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = coreGui
+
+-- Core Parent Canvas Frame
+local AirwalkContainer = Instance.new("Frame")
+AirwalkContainer.Name = "AirwalkHUD"
+AirwalkContainer.Size = UDim2.new(0, 102, 0, 230) -- Initial compact width
+AirwalkContainer.Position = UDim2.new(1, -150, 0.5, -115)
+AirwalkContainer.BackgroundTransparency = 1
+AirwalkContainer.Parent = ScreenGui
+
+-- Top Bar Component
+local TopBar = Instance.new("Frame")
+TopBar.Name = "TopBar"
+TopBar.Size = UDim2.new(1, 0, 0, 26)
+TopBar.BackgroundTransparency = 1
+TopBar.Parent = AirwalkContainer
+
+-- Center Drag Handle Line
+local DragHandle = Instance.new("Frame")
+DragHandle.Name = "DragHandle"
+DragHandle.Size = UDim2.new(0, 12, 0, 20)
+DragHandle.Position = UDim2.new(0.5, -6, 0, 2)
+DragHandle.BackgroundColor3 = Color3.fromRGB(220, 220, 255)
+DragHandle.BackgroundTransparency = 0.4
+DragHandle.BorderSizePixel = 0
+DragHandle.Parent = TopBar
+Instance.new("UICorner", DragHandle).CornerRadius = UDim.new(0, 4)
+
+local DragLine = Instance.new("Frame")
+DragLine.Size = UDim2.new(0, 2, 0, 12)
+DragLine.Position = UDim2.new(0.5, -1, 0.5, -6)
+DragLine.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+DragLine.BorderSizePixel = 0
+DragLine.Parent = DragHandle
+
+-- Settings Gear Button (Top Left)
+local SettingsBtn = Instance.new("TextButton")
+SettingsBtn.Name = "SettingsBtn"
+SettingsBtn.Size = UDim2.new(0, 24, 0, 24)
+SettingsBtn.Position = UDim2.new(0, 2, 0, 0)
+SettingsBtn.BackgroundTransparency = 1
+SettingsBtn.Text = "⚙️"
+SettingsBtn.TextSize = 16
+SettingsBtn.TextColor3 = Color3.new(1, 1, 1)
+SettingsBtn.Font = Enum.Font.GothamBold
+SettingsBtn.Parent = TopBar
+
+-- Close Engine Button (Top Right - Vis via Settings status)
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0, 22, 0, 22)
+CloseBtn.Position = UDim2.new(1, -24, 0, 1)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(160, 45, 45)
+CloseBtn.BackgroundTransparency = 0.2
+CloseBtn.Text = "✕"
+CloseBtn.TextSize = 11
+CloseBtn.TextColor3 = Color3.new(1, 1, 1)
+CloseBtn.Font = Enum.Font.GothamBold
+CloseBtn.Visible = false
+CloseBtn.Parent = TopBar
+Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 4)
+
+-- Content Frame
+local ContentFrame = Instance.new("Frame")
+ContentFrame.Name = "ContentFrame"
+ContentFrame.Size = UDim2.new(1, 0, 1, -26)
+ContentFrame.Position = UDim2.new(0, 0, 0, 26)
+ContentFrame.BackgroundTransparency = 1
+ContentFrame.Parent = AirwalkContainer
+
+-- Settings Tab Container Frame
+local SettingsTab = Instance.new("Frame")
+SettingsTab.Name = "SettingsTab"
+SettingsTab.Size = UDim2.new(0, 120, 1, 0)
+SettingsTab.Position = UDim2.new(0, 2, 0, 0)
+SettingsTab.BackgroundTransparency = 1
+SettingsTab.Visible = false
+SettingsTab.Parent = ContentFrame
+
+local SettingsLayout = Instance.new("UIListLayout", SettingsTab)
+SettingsLayout.FillDirection = Enum.FillDirection.Vertical
+SettingsLayout.SortOrder = Enum.SortOrder.LayoutOrder
+SettingsLayout.Padding = UDim.new(0, 10)
+
+-- Utility Tab Container Frame (Houses Rows side-by-side)
+local UtilityTab = Instance.new("Frame")
+UtilityTab.Name = "UtilityTab"
+UtilityTab.Size = UDim2.new(0, 96, 1, 0)
+UtilityTab.Position = UDim2.new(0, 2, 0, 0) -- Adjusts dynamically via script
+UtilityTab.BackgroundTransparency = 1
+UtilityTab.Parent = ContentFrame
+
+local Row2Frame = Instance.new("Frame", UtilityTab)
+Row2Frame.Name = "Row2"
+Row2Frame.Size = UDim2.new(0, 44, 1, 0)
+Row2Frame.Position = UDim2.new(0, 0, 0, 0)
+Row2Frame.BackgroundTransparency = 1
+
+local Row2Layout = Instance.new("UIListLayout", Row2Frame)
+Row2Layout.FillDirection = Enum.FillDirection.Vertical
+Row2Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+Row2Layout.Padding = UDim.new(0, 8)
+
+local Row1Frame = Instance.new("Frame", UtilityTab)
+Row1Frame.Name = "Row1"
+Row1Frame.Size = UDim2.new(0, 44, 1, 0)
+Row1Frame.Position = UDim2.new(0, 48, 0, 0)
+Row1Frame.BackgroundTransparency = 1
+
+local Row1Layout = Instance.new("UIListLayout", Row1Frame)
+Row1Layout.FillDirection = Enum.FillDirection.Vertical
+Row1Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+Row1Layout.Padding = UDim.new(0, 8)
+
+-- // --- [COMPONENT GENERATORS] ---
+local function createUtilityButton(symbol, parent, order)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(0, 42, 0, 42)
+    btn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
+    btn.BackgroundTransparency = 0.15
+    btn.Text = symbol
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 16
+    btn.LayoutOrder = order
+    btn.Parent = parent
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(1, 0)
+    return btn
+end
+
+local function createSwapperControl(labelTitle, defaultDisplay, parent, order)
+    local wrapper = Instance.new("Frame")
+    wrapper.Size = UDim2.new(1, -10, 0, 48)
+    wrapper.BackgroundTransparency = 1
+    wrapper.LayoutOrder = order
+    wrapper.Parent = parent
+    
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, 0, 0, 14)
+    lbl.BackgroundTransparency = 1
+    lbl.Text = labelTitle
+    lbl.TextColor3 = Color3.fromRGB(200, 190, 220)
+    lbl.Font = Enum.Font.GothamBold
+    lbl.TextSize = 10
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Parent = wrapper
+    
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1, 0, 0, 30)
+    btn.Position = UDim2.new(0, 0, 0, 16)
+    btn.BackgroundColor3 = Color3.fromRGB(35, 30, 50)
+    btn.BackgroundTransparency = 0.2
+    btn.Text = tostring(defaultDisplay)
+    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.Font = Enum.Font.GothamBold
+    btn.TextSize = 12
+    btn.Parent = wrapper
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 4)
+    
+    -- Hidden overlapping TextBox for manual text input modes
+    local box = Instance.new("TextBox")
+    box.Size = btn.Size
+    box.Position = btn.Position
+    box.BackgroundColor3 = Color3.fromRGB(50, 40, 70)
+    box.Text = ""
+    box.PlaceholderText = "Type num..."
+    box.TextColor3 = Color3.new(1, 1, 1)
+    box.Font = Enum.Font.GothamBold
+    box.TextSize = 12
+    box.Visible = false
+    box.ClearTextOnFocus = true
+    box.Parent = wrapper
+    Instance.new("UICorner", box).CornerRadius = UDim.new(0, 4)
+    
+    return btn, box
+end
+
+-- Instantiating Utility System Controls
+local AirUpBtn    = createUtilityButton("▲", Row1Frame, 1)
+local AirToggleBtn = createUtilityButton("●", Row1Frame, 2)
+local AirPhaseBtn  = createUtilityButton("Ø", Row1Frame, 3)
+local AirDownBtn  = createUtilityButton("▼", Row1Frame, 4)
+
+local TpWalkToggleBtn = createUtilityButton("⚡", Row2Frame, 1)
+local BigTpUpBtn      = createUtilityButton("⭡", Row2Frame, 2)
+local BigTpDownBtn    = createUtilityButton("⭣", Row2Frame, 3)
+
+-- Instantiating Swapper Configurations
+local TpwSwapperBtn, TpwBox = createSwapperControl("TPW SPEED", tpwSpeed, SettingsTab, 1)
+local YTpSwapperBtn, YTpBox = createSwapperControl("Y TP DIFF", yTpDiff, SettingsTab, 2)
+
+-- // --- [DYNAMIC MATRIX LAYOUT ENGINE] ---
+local function updateLayoutVisibility()
+    if SettingsTab.Visible then
+        AirwalkContainer.Size = UDim2.new(0, 226, 0, 230)
+        UtilityTab.Position = UDim2.new(0, 126, 0, 0)
+        CloseBtn.Visible = true
+    else
+        AirwalkContainer.Size = UDim2.new(0, 102, 0, 230)
+        UtilityTab.Position = UDim2.new(0, 2, 0, 0)
+        CloseBtn.Visible = false
+    end
+end
+
+trackConnection(SettingsBtn.MouseButton1Click:Connect(function()
+    SettingsTab.Visible = not SettingsTab.Visible
+    updateLayoutVisibility()
+end))
+
+-- // --- [CORE PHYSICS SYSTEM & FIXES] ---
+local function setCharacterCollision(canCollide)
+    for i = 1, #noclipParts do
+        local part = noclipParts[i]
+        if part and part.Parent then part.CanCollide = canCollide end
+    end
+end
+
+trackConnection(AirUpBtn.MouseButton1Down:Connect(function() manualMovingUp = true end))
+trackConnection(AirUpBtn.InputEnded:Connect(function(io) if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then manualMovingUp = false end end))
+trackConnection(AirDownBtn.MouseButton1Down:Connect(function() manualMovingDown = true end))
+trackConnection(AirDownBtn.InputEnded:Connect(function(io) if io.UserInputType == Enum.UserInputType.MouseButton1 or io.UserInputType == Enum.UserInputType.Touch then manualMovingDown = false end end))
+
+trackConnection(AirToggleBtn.MouseButton1Click:Connect(function()
+    airwalkEnabled = not airwalkEnabled
+    if airwalkEnabled then
+        AirToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 139, 87)
+        if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then 
+            airwalkY = player.Character.HumanoidRootPart.Position.Y - 3.5 
+        end
+    else
+        AirToggleBtn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
+        manualMovingUp = false
+        manualMovingDown = false
+        noclipEnabled = false
+        AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(25, 20, 35)
+        setCharacterCollision(true)
+        if airwalkPart then airwalkPart:Destroy() airwalkPart = nil end
+    end
+end))
+
+trackConnection(AirPhaseBtn.MouseButton1Click:Connect(function()
+    if not airwalkEnabled then return end
+    noclipEnabled = not noclipEnabled
+    if noclipEnabled then 
+        AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(142, 68, 173) 
+    else 
+        AirPhaseBtn.BackgroundColor3 = Color3.fromRGB(25, 20, 35) 
+        setCharacterCollision(true) 
+    end
+end))
+
+-- Engine Physics Connection Hook
+trackConnection(RunService.Heartbeat:Connect(function(dt)
+    local char = player.Character
+    if not char then return end
+    local rootPart = char:FindFirstChild("HumanoidRootPart")
+    local humanoid = char:FindFirstChildOfClass("Humanoid")
+    if not rootPart or not humanoid then return end
+
+    -- 1. Airwalk Platform Execution Module
+    if airwalkEnabled then
+        local currentFeetY = rootPart.Position.Y - 3.5
+        if airwalkY == 0 then airwalkY = currentFeetY end
+        
+        local speed = 30
+        if manualMovingUp then
+            local deltaMove = speed * dt 
+            airwalkY = airwalkY + deltaMove 
+            rootPart.CFrame = rootPart.CFrame + Vector3.new(0, deltaMove, 0)
+        elseif manualMovingDown then
+            local deltaMove = speed * dt 
+            airwalkY = airwalkY - deltaMove 
+            rootPart.CFrame = rootPart.CFrame + Vector3.new(0, -deltaMove, 0)
+        elseif humanoid.Jump or UserInputService:IsKeyDown(Enum.KeyCode.Space) then
+            airwalkY = airwalkY + (humanoid.JumpPower * dt)
+        elseif not noclipEnabled then
+            -- CRITICAL FIX: Raycasting optimization excludes the airwalk platform itself to completely stop sinking
+            local rayParams = RaycastParams.new()
+            rayParams.FilterType = Enum.RaycastFilterType.Exclude
+            rayParams.FilterDescendantsInstances = {char, airwalkPart}
+            
+            local groundRay = workspace:Raycast(rootPart.Position, Vector3.new(0, -5, 0), rayParams)
+            if groundRay and humanoid.FloorMaterial ~= Enum.Material.Air then
+                airwalkY = groundRay.Position.Y
+            end
+            
+            -- Strict vertical lock stabilization clamping
+            if not manualMovingUp and not manualMovingDown and humanoid.MoveDirection.Magnitude == 0 then
+                rootPart.Velocity = Vector3.new(rootPart.Velocity.X, 0, rootPart.Velocity.Z)
+                rootPart.CFrame = CFrame.new(rootPart.Position.X, airwalkY + 3.5, rootPart.Position.Z) * rootPart.CFrame.Rotation
+            end
+        end
+        
+        if noclipEnabled then
+            rootPart.Velocity = Vector3.new(rootPart.Velocity.X, 0, rootPart.Velocity.Z)
+            rootPart.CFrame = CFrame.new(rootPart.Position.X, airwalkY + 3.5, rootPart.Position.Z) * rootPart.CFrame.Rotation
+        end
+        
+        if not airwalkPart or not airwalkPart.Parent then
+            airwalkPart = Instance.new("Part") 
+            airwalkPart.Size = Vector3.new(16, 0.5, 16) 
+            airwalkPart.Transparency = 1 
+            airwalkPart.Anchored = true 
+            airwalkPart.CanCollide = true 
+            airwalkPart.Parent = workspace
+        end
+        airwalkPart.CFrame = CFrame.new(rootPart.Position.X, airwalkY, rootPart.Position.Z)
+    end
+
+    -- 2. Frame-Perfect TP Walk Core Module
+    if tpWalkEnabled and humanoid.MoveDirection.Magnitude > 0 then
+        local moveDir = humanoid.MoveDirection
+        rootPart.CFrame = rootPart.CFrame + (moveDir * tpwSpeed)
+    end
+end))
+
+local physicsHookName = RunService:FindFirstChild("Stepped") and "Stepped" or "PreSimulation"
+trackConnection(RunService[physicsHookName]:Connect(function()
+    if airwalkEnabled and noclipEnabled then
+        for i = 1, #noclipParts do
+            local part = noclipParts[i]
+            if part and part.Parent then part.CanCollide = false end
+        end
+    end
+end))
+
+-- // --- [UTILITY ROW 2 IMPLEMENTATION MODULES] ---
+trackConnection(TpWalkToggleBtn.MouseButton1Click:Connect(function()
+    tpWalkEnabled = not tpWalkEnabled
+    TpWalkToggleBtn.BackgroundColor3 = tpWalkEnabled and Color3.fromRGB(142, 68, 173) or Color3.fromRGB(25, 20, 35)
+end))
+
+local function instantaneousVerticalTp(yOffset)
+    local char = player.Character
+    local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+    if rootPart then
+        rootPart.CFrame = rootPart.CFrame + Vector3.new(0, yOffset, 0)
+        if airwalkEnabled then
+            airwalkY = airwalkY + yOffset
+        end
+    end
+end
+
+trackConnection(BigTpUpBtn.MouseButton1Click:Connect(function() instantaneousVerticalTp(yTpDiff) end))
+trackConnection(BigTpDownBtn.MouseButton1Click:Connect(function() instantaneousVerticalTp(-yTpDiff) end))
+
+-- // --- [HOLD INTERACTION & SWAPPER ENGINES] ---
+local function setupSwapperSystem(btn, box, choices, updateCallback)
+    local currentIndex = 1
+    local holdCancelled = false
+    local connectionBegan, connectionEnded
+    
+    connectionBegan = btn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            holdCancelled = false
+            task.delay(0.7, function()
+                if not holdCancelled and scriptActive then
+                    btn.Visible = false
+                    box.Visible = true
+                    box:CaptureFocus()
+                end
+            end)
+        end
+    end)
+    
+    connectionEnded = btn.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            holdCancelled = true
+        end
+    end)
+    
+    local clickConn = btn.MouseButton1Click:Connect(function()
+        if box.Visible then return end
+        currentIndex = (currentIndex % #choices) + 1
+        local val = choices[currentIndex]
+        btn.Text = tostring(val)
+        updateCallback(val)
+    end)
+    
+    local focusConn = box.FocusLost:Connect(function(enterPressed)
+        local num = tonumber(box.Text)
+        if num then
+            btn.Text = tostring(num)
+            updateCallback(num)
+        end
+        box.Visible = false
+        btn.Visible = true
+    end)
+    
+    table.insert(activeConnections, connectionBegan)
+    table.insert(activeConnections, connectionEnded)
+    table.insert(activeConnections, clickConn)
+    table.insert(activeConnections, focusConn)
+end
+
+setupSwapperSystem(TpwSwapperBtn, TpwBox, tpwChoices, function(newVal) tpwSpeed = newVal end)
+setupSwapperSystem(YTpSwapperBtn, YTpBox, yTpChoices, function(newVal) yTpDiff = newVal end)
+
+-- // --- [GLOBAL DRAG COMPONENT ENGINE] ---
+local dragging, dragInput, dragStart, startPos
+trackConnection(DragHandle.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true 
+        dragStart = input.Position 
+        startPos = AirwalkContainer.Position
+        trackConnection(input.Changed:Connect(function() 
+            if input.UserInputState == Enum.UserInputState.End then dragging = false end 
+        end))
+    end
+end))
+
+trackConnection(DragHandle.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then 
+        dragInput = input 
+    end
+end))
+
+trackConnection(UserInputService.InputChanged:Connect(function(input)
+    if input == dragInput and dragging then
+        local delta = input.Position - dragStart
+        AirwalkContainer.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+end))
+
+-- // --- [CLEANUP DESTRUCTOR EXECUTIONS] ---
+local function runFullDestructionCleanup()
+    scriptActive = false
+    if descAddedConn then descAddedConn:Disconnect() end
+    for _, conn in ipairs(activeConnections) do 
+        if conn.Connected then conn:Disconnect() end 
+    end
+    if airwalkPart then airwalkPart:Destroy() end
+    setCharacterCollision(true)
+    ScreenGui:Destroy()
+end
+
+trackConnection(CloseBtn.MouseButton1Click:Connect(runFullDestructionCleanup))
