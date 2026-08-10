@@ -1,1 +1,542 @@
+--[[
+    ================================================================
+    STANDALONE UTILITY SCRIPT (💎, 👻, 🕵️)
+    ================================================================
+    - Phantom Mode Engine (👻): Toggles character touch interests. On first use, purges AntiCheatNPCs.
+    - Diamond Magnet Engine (💎): Magnetically pulls Diamond/DiamondDrop MeshParts to player. On first use, deletes Workspace diamonds.
+    - Soul Snatch Button: Pop-up button near hotbar to teleport to the nearest Soul once.
+    - Grudge Holder Manager (🕵️): GUI for managing server players vs stored grudges list.
+    - Protection Systems: Deletes CameraShake from StarterPack & purges "Blind" elements from ReplicatedStorage.
+]]
 
+-- AUTO RE-EXECUTION ON TELEPORT / SERVER HOP
+local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+
+if queueOnTeleport then
+    pcall(function()
+        queueOnTeleport([[
+            task.wait(2)
+            loadstring(game:HttpGet("https://raw.githubusercontent.com/Neokkin/Neokk10F/refs/heads/main/%5BEMA%5D%20Utility"))()
+        ]])
+    end)
+end
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+local StarterPack = game:GetService("StarterPack")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+-- 1. CLEANUP PREVIOUS INSTANCES
+local oldGui = PlayerGui:FindFirstChild("UtilityModulesUI")
+if oldGui then oldGui:Destroy() end
+
+-- 2. FILE SYSTEM & DATA SAVING
+local FOLDER_NAME = "AlephProject"
+local GRUDGE_PATH = "AlephProject/Grudges.json"
+local Grudges = {}
+
+local function initFileSystem()
+	if makefolder and isfolder and not isfolder(FOLDER_NAME) then
+		pcall(makefolder, FOLDER_NAME)
+	end
+end
+
+local function saveGrudges()
+	initFileSystem()
+	local success, jsonString = pcall(function()
+		return HttpService:JSONEncode(Grudges)
+	end)
+	if success and writefile then
+		pcall(writefile, GRUDGE_PATH, jsonString)
+	end
+end
+
+local function loadGrudges()
+	initFileSystem()
+	if isfile and isfile(GRUDGE_PATH) then
+		local success, fileContent = pcall(readfile, GRUDGE_PATH)
+		if success and fileContent then
+			local decodeSuccess, decoded = pcall(function()
+				return HttpService:JSONDecode(fileContent)
+			end)
+			if decodeSuccess and type(decoded) == "table" then
+				Grudges = decoded
+			end
+		end
+	end
+end
+loadGrudges()
+
+-- 3. THEME & STYLING
+local THEME = {
+	BgDark       = Color3.fromRGB(15, 10, 25),
+	BgMenu       = Color3.fromRGB(28, 18, 42),
+	AccentNeon   = Color3.fromRGB(190, 50, 255),
+	TextWhite    = Color3.fromRGB(255, 255, 255),
+	Selected     = Color3.fromRGB(50, 200, 120),
+	RedAccent    = Color3.fromRGB(255, 50, 50),
+}
+
+local allStrokes = {}
+
+local function applyVoidStyle(guiObject, strokeColor)
+	guiObject.BackgroundColor3 = THEME.BgDark
+	guiObject.BorderSizePixel = 0
+	guiObject.Active = true
+
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 8)
+	if guiObject:IsA("TextButton") and guiObject.Size.X.Offset == guiObject.Size.Y.Offset then
+		corner.CornerRadius = UDim.new(1, 0)
+	end
+	corner.Parent = guiObject
+
+	local stroke = Instance.new("UIStroke")
+	local defaultColor = strokeColor or THEME.AccentNeon
+	stroke.Color = defaultColor
+	stroke.Thickness = 2
+	stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	stroke.Parent = guiObject
+
+	table.insert(allStrokes, { stroke = stroke, defaultColor = defaultColor, gui = guiObject })
+	return stroke
+end
+
+local function bindAction(button, callback)
+	button.Activated:Connect(callback)
+end
+
+-- 4. GUI CREATION
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "UtilityModulesUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = PlayerGui
+
+-- Toggle Buttons Container
+local buttonFrame = Instance.new("Frame")
+buttonFrame.Name = "ButtonFrame"
+buttonFrame.Size = UDim2.new(0, 180, 0, 60)
+buttonFrame.Position = UDim2.new(6/7, 0, 0.85, 0)
+buttonFrame.BackgroundTransparency = 1
+buttonFrame.ZIndex = 60
+buttonFrame.Parent = screenGui
+
+local grudgeButton = Instance.new("TextButton")
+grudgeButton.Name = "GrudgeButton"
+grudgeButton.Size = UDim2.new(0, 52, 0, 52)
+grudgeButton.Position = UDim2.new(0, 0, 0, 0)
+grudgeButton.Text = "🕵️"
+grudgeButton.TextSize = 24
+grudgeButton.TextColor3 = THEME.TextWhite
+grudgeButton.ZIndex = 60
+grudgeButton.Parent = buttonFrame
+applyVoidStyle(grudgeButton)
+
+local phantomButton = Instance.new("TextButton")
+phantomButton.Name = "PhantomButton"
+phantomButton.Size = UDim2.new(0, 52, 0, 52)
+phantomButton.Position = UDim2.new(0, 60, 0, 0)
+phantomButton.Text = "👻"
+phantomButton.TextSize = 24
+phantomButton.TextColor3 = THEME.TextWhite
+phantomButton.ZIndex = 60
+phantomButton.Parent = buttonFrame
+applyVoidStyle(phantomButton)
+
+local diamondButton = Instance.new("TextButton")
+diamondButton.Name = "DiamondButton"
+diamondButton.Size = UDim2.new(0, 52, 0, 52)
+diamondButton.Position = UDim2.new(0, 120, 0, 0)
+diamondButton.Text = "💎"
+diamondButton.TextSize = 24
+diamondButton.TextColor3 = THEME.TextWhite
+diamondButton.ZIndex = 60
+diamondButton.Parent = buttonFrame
+applyVoidStyle(diamondButton)
+
+-- SOUL SNATCH BUTTON (Top-Right of standard hotbar)
+local soulButton = Instance.new("TextButton")
+soulButton.Name = "SoulSnatchButton"
+soulButton.Size = UDim2.new(0, 95, 0, 26)
+soulButton.Position = UDim2.new(0.5, 150, 1, -70)
+soulButton.AnchorPoint = Vector2.new(0, 1)
+soulButton.BackgroundColor3 = THEME.BgDark
+soulButton.Text = "Soul Snatch"
+soulButton.TextColor3 = THEME.TextWhite
+soulButton.Font = Enum.Font.GothamBold
+soulButton.TextSize = 12
+soulButton.ZIndex = 60
+soulButton.Parent = screenGui
+
+local soulCorner = Instance.new("UICorner")
+soulCorner.CornerRadius = UDim.new(0, 6)
+soulCorner.Parent = soulButton
+
+local soulStroke = Instance.new("UIStroke")
+soulStroke.Color = Color3.fromRGB(255, 255, 255) -- White outline
+soulStroke.Thickness = 1.5
+soulStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+soulStroke.Parent = soulButton
+
+-- 5. PHANTOM MODE ENGINE (👻)
+local phantomModeEnabled = false
+local phantomFirstTriggered = false
+
+local function updatePhantomMode()
+	local char = LocalPlayer.Character
+	if char then
+		for _, part in ipairs(char:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanTouch = not phantomModeEnabled
+			end
+		end
+	end
+end
+
+local function togglePhantomMode()
+	phantomModeEnabled = not phantomModeEnabled
+	
+	if phantomModeEnabled and not phantomFirstTriggered then
+		phantomFirstTriggered = true
+		for _, obj in ipairs(Workspace:GetDescendants()) do
+			if obj.Name == "AntiCheatNPC2" or obj.Name == "AntiCheatNPC" then
+				obj:Destroy()
+			end
+		end
+	end
+
+	updatePhantomMode()
+	updateAllButtonStrokes()
+end
+
+bindAction(phantomButton, togglePhantomMode)
+
+LocalPlayer.CharacterAdded:Connect(function(char)
+	char.DescendantAdded:Connect(function(desc)
+		if phantomModeEnabled and desc:IsA("BasePart") then
+			desc.CanTouch = false
+		end
+	end)
+	task.defer(updatePhantomMode)
+end)
+
+-- 6. DIAMOND MAGNET & SOUL SNATCH ENGINE (💎)
+local diamondMagnetEnabled = false
+local treasureFirstToggled = false
+
+local function snatchSoul()
+	local char = LocalPlayer.Character
+	local hrp = char and char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	local nearestSoul = nil
+	local shortestDist = math.huge
+
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj.Name == "Soul" and obj:IsA("BasePart") then
+			local dist = (obj.Position - hrp.Position).Magnitude
+			if dist < shortestDist then
+				shortestDist = dist
+				nearestSoul = obj
+			end
+		end
+	end
+
+	if nearestSoul then
+		hrp.CFrame = nearestSoul.CFrame
+	end
+end
+
+bindAction(soulButton, snatchSoul)
+
+local function toggleDiamondMagnet()
+	diamondMagnetEnabled = not diamondMagnetEnabled
+	
+	if diamondMagnetEnabled then
+		if not treasureFirstToggled then
+			treasureFirstToggled = true
+			for _, obj in ipairs(Workspace:GetDescendants()) do
+				if obj.Name == "Diamond" or obj.Name == "DiamondDrop" then
+					obj:Destroy()
+				end
+			end
+		end
+	end
+
+	updateAllButtonStrokes()
+end
+
+bindAction(diamondButton, toggleDiamondMagnet)
+
+task.spawn(function()
+	while task.wait(0.1) do
+		if diamondMagnetEnabled then
+			local char = LocalPlayer.Character
+			local hrp = char and char:FindFirstChild("HumanoidRootPart")
+			if hrp then
+				local targetCFrame = hrp.CFrame
+				for _, obj in ipairs(Workspace:GetDescendants()) do
+					if obj:IsA("MeshPart") and (obj.Name == "DiamondDrop" or obj.Name == "Diamond") then
+						obj.CFrame = targetCFrame
+					end
+				end
+			end
+		end
+	end
+end)
+
+-- 7. STROKE UPDATE SYSTEM
+function updateAllButtonStrokes()
+	for i = #allStrokes, 1, -1 do
+		local item = allStrokes[i]
+		if not item.stroke or not item.stroke.Parent then
+			table.remove(allStrokes, i)
+		else
+			local targetColor = item.defaultColor
+			
+			if item.gui == grudgeButton then
+				local hasGrudgeInServer = false
+				for _, p in ipairs(Players:GetPlayers()) do
+					if p ~= LocalPlayer and Grudges[p.Name] then
+						hasGrudgeInServer = true
+						break
+					end
+				end
+				if hasGrudgeInServer then targetColor = THEME.RedAccent end
+			elseif item.gui == phantomButton then
+				targetColor = phantomModeEnabled and THEME.Selected or THEME.AccentNeon
+			elseif item.gui == diamondButton then
+				targetColor = diamondMagnetEnabled and THEME.Selected or THEME.AccentNeon
+			end
+
+			TweenService:Create(item.stroke, TweenInfo.new(0.3), { Color = targetColor }):Play()
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(updateAllButtonStrokes)
+Players.PlayerRemoving:Connect(updateAllButtonStrokes)
+
+-- 8. GRUDGE HOLDER MANAGER GUI (🕵️)
+local grudgeModal = Instance.new("Frame")
+grudgeModal.Name = "GrudgeModal"
+grudgeModal.Size = UDim2.new(0, 360, 0, 440)
+grudgeModal.AnchorPoint = Vector2.new(0.5, 0.5)
+grudgeModal.Position = UDim2.new(0.5, 0, 0.5, 0)
+grudgeModal.BackgroundColor3 = THEME.BgDark
+grudgeModal.Visible = false
+grudgeModal.ZIndex = 1000
+grudgeModal.Parent = screenGui
+applyVoidStyle(grudgeModal)
+
+local gTitle = Instance.new("TextLabel")
+gTitle.Size = UDim2.new(1, -40, 0, 36)
+gTitle.Position = UDim2.new(0, 15, 0, 2)
+gTitle.BackgroundTransparency = 1
+gTitle.Text = "Grudge Holder Manager"
+gTitle.TextColor3 = THEME.TextWhite
+gTitle.Font = Enum.Font.GothamBold
+gTitle.TextSize = 15
+gTitle.TextXAlignment = Enum.TextXAlignment.Left
+gTitle.ZIndex = 1001
+gTitle.Parent = grudgeModal
+
+local gCloseBtn = Instance.new("TextButton")
+gCloseBtn.Size = UDim2.new(0, 26, 0, 26)
+gCloseBtn.Position = UDim2.new(1, -32, 0, 6)
+gCloseBtn.Text = "×"
+gCloseBtn.Font = Enum.Font.GothamBold
+gCloseBtn.TextSize = 18
+gCloseBtn.TextColor3 = THEME.TextWhite
+gCloseBtn.ZIndex = 1001
+gCloseBtn.Parent = grudgeModal
+applyVoidStyle(gCloseBtn, Color3.fromRGB(220, 60, 60))
+
+local upperFrame = Instance.new("Frame")
+upperFrame.Size = UDim2.new(1, -24, 0.4, 0)
+upperFrame.Position = UDim2.new(0, 12, 0, 38)
+upperFrame.BackgroundColor3 = THEME.BgMenu
+upperFrame.ZIndex = 1001
+upperFrame.Parent = grudgeModal
+applyVoidStyle(upperFrame, THEME.AccentNeon)
+
+local upperScroll = Instance.new("ScrollingFrame")
+upperScroll.Size = UDim2.new(1, -8, 1, -8)
+upperScroll.Position = UDim2.new(0, 4, 0, 4)
+upperScroll.BackgroundTransparency = 1
+upperScroll.ScrollBarThickness = 3
+upperScroll.ZIndex = 1002
+upperScroll.Parent = upperFrame
+
+local upperList = Instance.new("UIListLayout")
+upperList.Padding = UDim.new(0, 4)
+upperList.Parent = upperScroll
+
+local lowerFrame = Instance.new("Frame")
+lowerFrame.Size = UDim2.new(1, -24, 0.4, 0)
+lowerFrame.Position = UDim2.new(0, 12, 0.4, 46)
+lowerFrame.BackgroundColor3 = THEME.BgMenu
+lowerFrame.ZIndex = 1001
+lowerFrame.Parent = grudgeModal
+applyVoidStyle(lowerFrame, THEME.AccentNeon)
+
+local lowerScroll = Instance.new("ScrollingFrame")
+lowerScroll.Size = UDim2.new(1, -8, 1, -8)
+lowerScroll.Position = UDim2.new(0, 4, 0, 4)
+lowerScroll.BackgroundTransparency = 1
+lowerScroll.ScrollBarThickness = 3
+lowerScroll.ZIndex = 1002
+lowerScroll.Parent = lowerFrame
+
+local lowerList = Instance.new("UIListLayout")
+lowerList.Padding = UDim.new(0, 4)
+lowerList.Parent = lowerScroll
+
+local addBtn = Instance.new("TextButton")
+addBtn.Size = UDim2.new(0, 80, 0, 28)
+addBtn.Position = UDim2.new(1, -174, 1, -34)
+addBtn.Text = "Add"
+addBtn.Font = Enum.Font.GothamBold
+addBtn.TextSize = 13
+addBtn.TextColor3 = THEME.TextWhite
+addBtn.ZIndex = 1002
+addBtn.Parent = grudgeModal
+applyVoidStyle(addBtn, THEME.Selected)
+
+local removeBtn = Instance.new("TextButton")
+removeBtn.Size = UDim2.new(0, 80, 0, 28)
+removeBtn.Position = UDim2.new(1, -88, 1, -34)
+removeBtn.Text = "Remove"
+removeBtn.Font = Enum.Font.GothamBold
+removeBtn.TextSize = 13
+removeBtn.TextColor3 = THEME.TextWhite
+removeBtn.ZIndex = 1002
+removeBtn.Parent = grudgeModal
+applyVoidStyle(removeBtn, Color3.fromRGB(200, 60, 60))
+
+local selectedUpper = {}
+local selectedLower = {}
+
+local function refreshGrudgeGUI()
+	for _, c in ipairs(upperScroll:GetChildren()) do
+		if c:IsA("TextButton") then c:Destroy() end
+	end
+	for _, c in ipairs(lowerScroll:GetChildren()) do
+		if c:IsA("TextButton") then c:Destroy() end
+	end
+
+	local currentPlrs = {}
+	for _, p in ipairs(Players:GetPlayers()) do
+		if p ~= LocalPlayer then table.insert(currentPlrs, p) end
+	end
+	table.sort(currentPlrs, function(a,b) return a.Name:lower() < b.Name:lower() end)
+
+	for _, p in ipairs(currentPlrs) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, -6, 0, 28)
+		btn.Font = Enum.Font.Gotham
+		btn.TextSize = 11
+		btn.Text = string.format("  [%s] | [%s]", p.Name, p.DisplayName)
+		btn.TextXAlignment = Enum.TextXAlignment.Left
+		btn.TextColor3 = THEME.TextWhite
+		btn.ZIndex = 1003
+		btn.Parent = upperScroll
+
+		local isSel = selectedUpper[p]
+		applyVoidStyle(btn, isSel and THEME.Selected or THEME.AccentNeon)
+		if isSel then btn.BackgroundColor3 = Color3.fromRGB(25, 60, 40) end
+
+		bindAction(btn, function()
+			selectedUpper[p] = not selectedUpper[p]
+			refreshGrudgeGUI()
+		end)
+	end
+	upperScroll.CanvasSize = UDim2.new(0, 0, 0, #currentPlrs * 32)
+
+	local grudgeKeys = {}
+	for username, nick in pairs(Grudges) do
+		table.insert(grudgeKeys, { Name = username, Nick = nick })
+	end
+	table.sort(grudgeKeys, function(a,b) return a.Name:lower() < b.Name:lower() end)
+
+	for _, item in ipairs(grudgeKeys) do
+		local btn = Instance.new("TextButton")
+		btn.Size = UDim2.new(1, -6, 0, 28)
+		btn.Font = Enum.Font.Gotham
+		btn.TextSize = 11
+		btn.Text = string.format("  [%s] | [%s]", item.Name, item.Nick)
+		btn.TextXAlignment = Enum.TextXAlignment.Left
+		btn.TextColor3 = THEME.TextWhite
+		btn.ZIndex = 1003
+		btn.Parent = lowerScroll
+
+		local isSel = selectedLower[item.Name]
+		applyVoidStyle(btn, isSel and Color3.fromRGB(200, 60, 60) or THEME.AccentNeon)
+		if isSel then btn.BackgroundColor3 = Color3.fromRGB(70, 20, 20) end
+
+		bindAction(btn, function()
+			selectedLower[item.Name] = not selectedLower[item.Name]
+			refreshGrudgeGUI()
+		end)
+	end
+	lowerScroll.CanvasSize = UDim2.new(0, 0, 0, #grudgeKeys * 32)
+end
+
+bindAction(addBtn, function()
+	for plr, sel in pairs(selectedUpper) do
+		if sel and plr.Parent == Players then
+			Grudges[plr.Name] = plr.DisplayName
+		end
+	end
+	selectedUpper = {}
+	saveGrudges()
+	updateAllButtonStrokes()
+	refreshGrudgeGUI()
+end)
+
+bindAction(removeBtn, function()
+	for name, sel in pairs(selectedLower) do
+		if sel then
+			Grudges[name] = nil
+		end
+	end
+	selectedLower = {}
+	saveGrudges()
+	updateAllButtonStrokes()
+	refreshGrudgeGUI()
+end)
+
+bindAction(gCloseBtn, function() grudgeModal.Visible = false end)
+bindAction(grudgeButton, function()
+	refreshGrudgeGUI()
+	grudgeModal.Visible = true
+end)
+
+-- 9. CAMERA SHAKE & BLIND CLEANER ENGINE
+-- Directly removes CameraShake from StarterPack on execution
+local starterCameraShake = StarterPack:FindFirstChild("CameraShake")
+if starterCameraShake then
+	starterCameraShake:Destroy()
+end
+
+-- Deletes any Blind instances inside ReplicatedStorage
+for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+	if obj.Name == "Blind" then
+		obj:Destroy()
+	end
+end
+
+ReplicatedStorage.DescendantAdded:Connect(function(desc)
+	if desc.Name == "Blind" then
+		desc:Destroy()
+	end
+end)
+
+-- Initial stroke check
+updateAllButtonStrokes()
