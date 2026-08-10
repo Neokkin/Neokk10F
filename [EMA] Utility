@@ -6,7 +6,7 @@
     - Diamond Magnet Engine (💎): Magnetically pulls Diamond/DiamondDrop MeshParts to player. On first use, deletes Workspace diamonds.
     - Dynamic Soul Snatch Button: Pop-up button near hotbar that ONLY appears when a "Soul" is found in Workspace.
     - Grudge Holder Manager (🕵️): GUI for managing server players vs stored grudges list.
-    - Protection Systems: Deletes CameraShake from StarterPack & purges ALL "Blind" descendants from all players' Backpacks and Characters.
+    - Protection Systems: Deletes CameraShake from StarterPack & prevents/instantly purges "Blind" in LocalPlayer's PlayerGui.
 ]]
 
 -- AUTO RE-EXECUTION ON TELEPORT / SERVER HOP
@@ -550,74 +550,25 @@ bindAction(grudgeButton, function()
 	grudgeModal.Visible = true
 end)
 
--- 9. CAMERA SHAKE & PLAYER BLIND CLEANER ENGINE
+-- 9. CAMERA SHAKE & PLAYERGUI BLIND PREVENTER ENGINE
 -- Directly removes CameraShake from StarterPack on execution
 local starterCameraShake = StarterPack:FindFirstChild("CameraShake")
 if starterCameraShake then
 	starterCameraShake:Destroy()
 end
 
--- Deletes ALL "Blind" descendants inside all players' Backpacks & Characters
-local function purgeBlindFromContainer(container)
-	if not container then return end
-	for _, desc in ipairs(container:GetDescendants()) do
-		if desc.Name == "Blind" then
-			pcall(function() desc:Destroy() end)
-		end
+-- 1. Initial Purge of existing Blind elements in PlayerGui
+for _, desc in ipairs(PlayerGui:GetDescendants()) do
+	if desc.Name == "Blind" then
+		pcall(function() desc:Destroy() end)
 	end
 end
 
-local function setupPlayerListeners(player)
-	-- Listen to existing character & new characters
-	local function onCharacterAdded(char)
-		purgeBlindFromContainer(char)
-		char.DescendantAdded:Connect(function(desc)
-			if desc.Name == "Blind" then
-				task.defer(function() pcall(function() desc:Destroy() end) end)
-			end
-		end)
-	end
-
-	if player.Character then
-		onCharacterAdded(player.Character)
-	end
-	player.CharacterAdded:Connect(onCharacterAdded)
-
-	-- Listen to backpack
-	local function onBackpackAdded(backpack)
-		purgeBlindFromContainer(backpack)
-		backpack.DescendantAdded:Connect(function(desc)
-			if desc.Name == "Blind" then
-				task.defer(function() pcall(function() desc:Destroy() end) end)
-			end
-		end)
-	end
-
-	local bp = player:FindFirstChildOfClass("Backpack")
-	if bp then
-		onBackpackAdded(bp)
-	end
-	player.ChildAdded:Connect(function(child)
-		if child:IsA("Backpack") then
-			onBackpackAdded(child)
-		end
-	end)
-end
-
--- Hook into all existing players & future players
-for _, p in ipairs(Players:GetPlayers()) do
-	setupPlayerListeners(p)
-end
-
-Players.PlayerAdded:Connect(setupPlayerListeners)
-
--- Continuous loop safety check every second
-task.spawn(function()
-	while task.wait(1) do
-		for _, p in ipairs(Players:GetPlayers()) do
-			purgeBlindFromContainer(p:FindFirstChildOfClass("Backpack"))
-			purgeBlindFromContainer(p.Character)
-		end
+-- 2. Instant Prevention Engine for PlayerGui
+PlayerGui.DescendantAdded:Connect(function(desc)
+	if desc.Name == "Blind" then
+		-- Delete instantly before it can render or execute on the screen
+		desc:Destroy()
 	end
 end)
 
