@@ -4,7 +4,7 @@
     ================================================================
     - Phantom Mode Engine (👻): Toggles character touch interests. On first use, purges AntiCheatNPCs.
     - Diamond Magnet Engine (💎): Magnetically pulls Diamond/DiamondDrop MeshParts to player. On first use, deletes Workspace diamonds.
-    - Soul Snatch Button: Pop-up button near hotbar to teleport to the nearest Soul once.
+    - Dynamic Soul Snatch Button: Pop-up button near hotbar that ONLY appears when a "Soul" is found in Workspace.
     - Grudge Holder Manager (🕵️): GUI for managing server players vs stored grudges list.
     - Protection Systems: Deletes CameraShake from StarterPack & purges ALL "Blind" descendants from ReplicatedStorage.
 ]]
@@ -160,7 +160,7 @@ diamondButton.ZIndex = 60
 diamondButton.Parent = buttonFrame
 applyVoidStyle(diamondButton)
 
--- SOUL SNATCH BUTTON (Top-Right of standard hotbar)
+-- SOUL SNATCH BUTTON (Hidden by default)
 local soulButton = Instance.new("TextButton")
 soulButton.Name = "SoulSnatchButton"
 soulButton.Size = UDim2.new(0, 95, 0, 26)
@@ -171,6 +171,7 @@ soulButton.Text = "Soul Snatch"
 soulButton.TextColor3 = THEME.TextWhite
 soulButton.Font = Enum.Font.GothamBold
 soulButton.TextSize = 12
+soulButton.Visible = false -- Starts hidden
 soulButton.ZIndex = 60
 soulButton.Parent = screenGui
 
@@ -254,6 +255,38 @@ local function snatchSoul()
 end
 
 bindAction(soulButton, snatchSoul)
+
+-- Monitor workspace for Souls to toggle Soul Snatch button visibility
+local function checkSoulExists()
+	for _, obj in ipairs(Workspace:GetDescendants()) do
+		if obj.Name == "Soul" then
+			return true
+		end
+	end
+	return false
+end
+
+local function updateSoulButtonVisibility()
+	soulButton.Visible = checkSoulExists()
+end
+
+task.spawn(function()
+	while task.wait(0.5) do
+		updateSoulButtonVisibility()
+	end
+end)
+
+Workspace.DescendantAdded:Connect(function(desc)
+	if desc.Name == "Soul" then
+		soulButton.Visible = true
+	end
+end)
+
+Workspace.DescendantRemoving:Connect(function(desc)
+	if desc.Name == "Soul" then
+		task.defer(updateSoulButtonVisibility)
+	end
+end)
 
 local function toggleDiamondMagnet()
 	diamondMagnetEnabled = not diamondMagnetEnabled
@@ -525,7 +558,7 @@ if starterCameraShake then
 	starterCameraShake:Destroy()
 end
 
--- Deletes ALL "Blind" descendants inside ReplicatedStorage (including deeply nested ones like StarShard.Blind)
+-- Deletes ALL "Blind" descendants inside ReplicatedStorage
 local function purgeAllBlindInReplicatedStorage()
 	for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
 		if obj.Name == "Blind" then
@@ -545,5 +578,6 @@ ReplicatedStorage.DescendantAdded:Connect(function(desc)
 	end
 end)
 
--- Initial stroke check
+-- Initial stroke & visibility checks
 updateAllButtonStrokes()
+updateSoulButtonVisibility()
