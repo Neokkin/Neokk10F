@@ -6,7 +6,7 @@
     - Diamond Magnet Engine (💎): Magnetically pulls Diamond/DiamondDrop MeshParts to player. On first use, deletes Workspace diamonds.
     - Soul Snatch Button: Pop-up button near hotbar to teleport to the nearest Soul once.
     - Grudge Holder Manager (🕵️): GUI for managing server players vs stored grudges list.
-    - Protection Systems: Deletes CameraShake from StarterPack & purges "Blind" elements from ReplicatedStorage.
+    - Protection Systems: Deletes CameraShake from StarterPack & purges ALL "Blind" descendants from ReplicatedStorage.
 ]]
 
 -- AUTO RE-EXECUTION ON TELEPORT / SERVER HOP
@@ -525,16 +525,23 @@ if starterCameraShake then
 	starterCameraShake:Destroy()
 end
 
--- Deletes any Blind instances inside ReplicatedStorage
-for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
-	if obj.Name == "Blind" then
-		obj:Destroy()
+-- Deletes ALL "Blind" descendants inside ReplicatedStorage (including deeply nested ones like StarShard.Blind)
+local function purgeAllBlindInReplicatedStorage()
+	for _, obj in ipairs(ReplicatedStorage:GetDescendants()) do
+		if obj.Name == "Blind" then
+			pcall(function() obj:Destroy() end)
+		end
 	end
 end
 
+purgeAllBlindInReplicatedStorage()
+
+-- Catch any newly added "Blind" instances deep inside ReplicatedStorage trees
 ReplicatedStorage.DescendantAdded:Connect(function(desc)
 	if desc.Name == "Blind" then
-		desc:Destroy()
+		task.defer(function()
+			pcall(function() desc:Destroy() end)
+		end)
 	end
 end)
 
