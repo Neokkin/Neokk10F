@@ -1,19 +1,12 @@
 --[[
     ================================================================
-    STANDALONE UTILITY SCRIPT (💎, 👻, 🕵️, 🎯)
+    STANDALONE UTILITY SCRIPT (💎, 👻, 🕵️)
     ================================================================
-    - Phantom Mode Engine (👻): Toggles character touch interests. On first use, purges AntiCheatNPCs.
-    - Diamond Magnet Engine (💎): Magnetically pulls Diamond/DiamondDrop MeshParts to player. On first use, deletes Workspace diamonds.
-    - Hitbox Engine (🎯): Expands all players' hitboxes based on HSize (Default: 50).
-      * CanQuery = false prevents mouse clicks / raycast skills from being blocked.
-      * Instantly purges player Spawn ForceFields so no transparent box appears on spawn.
-      * Completely invisible (Transparency 1) when Show Hitbox is OFF.
-      * Clean semi-transparent plastic rendering when Show Hitbox is ON.
-      * Retains expanded size across player RESPAWNS automatically while toggled ON.
-      * Hold for 1s: Opens Dark Theme Settings GUI (HSize Input & Show Hitbox Toggle).
-      * Toggle: Expands hitboxes (or restores to default when OFF).
+    - Phantom Mode Engine (👻): Toggles character touch interests.
+    - Diamond Magnet Engine (💎): Magnetically pulls Diamond/DiamondDrop MeshParts to player.
     - Dynamic Soul Snatch Button: Pop-up button near hotbar that ONLY appears when a "Soul" is found in Workspace.
     - Grudge Holder Manager (🕵️): GUI for managing server players vs stored grudges list.
+    - Immediate Cleanup: Auto-deletes AntiCheatNPCs & Diamonds on script execution.
     - Protection Systems: Deletes CameraShake from StarterPack & prevents/instantly purges "Blind" in LocalPlayer's PlayerGui.
 ]]
 
@@ -79,7 +72,14 @@ local function loadGrudges()
 end
 loadGrudges()
 
--- 3. THEME & STYLING
+-- 3. IMMEDIATE EXECUTION PURGE (NPCs & Diamonds)
+for _, obj in ipairs(Workspace:GetDescendants()) do
+	if obj.Name == "AntiCheatNPC2" or obj.Name == "AntiCheatNPC" or obj.Name == "Diamond" or obj.Name == "DiamondDrop" then
+		pcall(function() obj:Destroy() end)
+	end
+end
+
+-- 4. THEME & STYLING
 local THEME = {
 	BgDark       = Color3.fromRGB(15, 10, 25),
 	BgMenu       = Color3.fromRGB(28, 18, 42),
@@ -118,7 +118,7 @@ local function bindAction(button, callback)
 	button.Activated:Connect(callback)
 end
 
--- 4. GUI CREATION
+-- 5. GUI CREATION
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "UtilityModulesUI"
 screenGui.ResetOnSpawn = false
@@ -167,18 +167,6 @@ diamondButton.ZIndex = 60
 diamondButton.Parent = buttonFrame
 applyVoidStyle(diamondButton)
 
--- 🎯 HITBOX BUTTON
-local hitboxButton = Instance.new("TextButton")
-hitboxButton.Name = "HitboxButton"
-hitboxButton.Size = UDim2.new(0, 52, 0, 52)
-hitboxButton.Position = UDim2.new(0, 120, 0, -60)
-hitboxButton.Text = "🎯"
-hitboxButton.TextSize = 24
-hitboxButton.TextColor3 = THEME.TextWhite
-hitboxButton.ZIndex = 60
-hitboxButton.Parent = buttonFrame
-applyVoidStyle(hitboxButton)
-
 -- SOUL SNATCH BUTTON (Hidden by default)
 local soulButton = Instance.new("TextButton")
 soulButton.Name = "SoulSnatchButton"
@@ -204,9 +192,8 @@ soulStroke.Thickness = 1.5
 soulStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 soulStroke.Parent = soulButton
 
--- 5. PHANTOM MODE ENGINE (👻)
+-- 6. PHANTOM MODE ENGINE (👻)
 local phantomModeEnabled = false
-local phantomFirstTriggered = false
 
 local function updatePhantomMode()
 	local char = LocalPlayer.Character
@@ -221,16 +208,6 @@ end
 
 local function togglePhantomMode()
 	phantomModeEnabled = not phantomModeEnabled
-	
-	if phantomModeEnabled and not phantomFirstTriggered then
-		phantomFirstTriggered = true
-		for _, obj in ipairs(Workspace:GetDescendants()) do
-			if obj.Name == "AntiCheatNPC2" or obj.Name == "AntiCheatNPC" then
-				obj:Destroy()
-			end
-		end
-	end
-
 	updatePhantomMode()
 	updateAllButtonStrokes()
 end
@@ -246,9 +223,8 @@ LocalPlayer.CharacterAdded:Connect(function(char)
 	task.defer(updatePhantomMode)
 end)
 
--- 6. DIAMOND MAGNET & SOUL SNATCH ENGINE (💎)
+-- 7. DIAMOND MAGNET & SOUL SNATCH ENGINE (💎)
 local diamondMagnetEnabled = false
-local treasureFirstToggled = false
 
 local function snatchSoul()
 	local char = LocalPlayer.Character
@@ -308,18 +284,6 @@ end)
 
 local function toggleDiamondMagnet()
 	diamondMagnetEnabled = not diamondMagnetEnabled
-	
-	if diamondMagnetEnabled then
-		if not treasureFirstToggled then
-			treasureFirstToggled = true
-			for _, obj in ipairs(Workspace:GetDescendants()) do
-				if obj.Name == "Diamond" or obj.Name == "DiamondDrop" then
-					obj:Destroy()
-				end
-			end
-		end
-	end
-
 	updateAllButtonStrokes()
 end
 
@@ -340,242 +304,6 @@ task.spawn(function()
 			end
 		end
 	end
-end)
-
--- 7. HITBOX ENGINE & SETTINGS POP-UP (🎯)
-local hitboxEnabled = false
-local showHitbox = false
-local hSize = 50 -- Default input set to 50
-
--- Hitbox Settings Pop-Up GUI
-local hitboxModal = Instance.new("Frame")
-hitboxModal.Name = "HitboxModal"
-hitboxModal.Size = UDim2.new(0, 300, 0, 180)
-hitboxModal.AnchorPoint = Vector2.new(0.5, 0.5)
-hitboxModal.Position = UDim2.new(0.5, 0, 0.5, 0)
-hitboxModal.BackgroundColor3 = THEME.BgDark
-hitboxModal.Visible = false
-hitboxModal.ZIndex = 1000
-hitboxModal.Parent = screenGui
-applyVoidStyle(hitboxModal)
-
--- Title
-local hTitle = Instance.new("TextLabel")
-hTitle.Size = UDim2.new(1, -40, 0, 36)
-hTitle.Position = UDim2.new(0, 15, 0, 2)
-hTitle.BackgroundTransparency = 1
-hTitle.Text = "Hitbox Settings"
-hTitle.TextColor3 = THEME.TextWhite
-hTitle.Font = Enum.Font.GothamBold
-hTitle.TextSize = 15
-hTitle.TextXAlignment = Enum.TextXAlignment.Left
-hTitle.ZIndex = 1001
-hTitle.Parent = hitboxModal
-
--- Close Button
-local hCloseBtn = Instance.new("TextButton")
-hCloseBtn.Size = UDim2.new(0, 26, 0, 26)
-hCloseBtn.Position = UDim2.new(1, -32, 0, 6)
-hCloseBtn.Text = "×"
-hCloseBtn.Font = Enum.Font.GothamBold
-hCloseBtn.TextSize = 18
-hCloseBtn.TextColor3 = THEME.TextWhite
-hCloseBtn.ZIndex = 1001
-hCloseBtn.Parent = hitboxModal
-applyVoidStyle(hCloseBtn, Color3.fromRGB(220, 60, 60))
-
--- HSize Input Box
-local hSizeLabel = Instance.new("TextLabel")
-hSizeLabel.Size = UDim2.new(0, 130, 0, 30)
-hSizeLabel.Position = UDim2.new(0, 15, 0, 48)
-hSizeLabel.BackgroundTransparency = 1
-hSizeLabel.Text = "Hitbox Size (HSize):"
-hSizeLabel.TextColor3 = THEME.TextWhite
-hSizeLabel.Font = Enum.Font.Gotham
-hSizeLabel.TextSize = 12
-hSizeLabel.TextXAlignment = Enum.TextXAlignment.Left
-hSizeLabel.ZIndex = 1001
-hSizeLabel.Parent = hitboxModal
-
-local hSizeBox = Instance.new("TextBox")
-hSizeBox.Size = UDim2.new(0, 110, 0, 30)
-hSizeBox.Position = UDim2.new(1, -125, 0, 48)
-hSizeBox.Text = tostring(hSize)
-hSizeBox.TextColor3 = THEME.TextWhite
-hSizeBox.Font = Enum.Font.GothamBold
-hSizeBox.TextSize = 13
-hSizeBox.ZIndex = 1001
-hSizeBox.Parent = hitboxModal
-applyVoidStyle(hSizeBox, THEME.AccentNeon)
-
--- Show Hitbox Toggle
-local showHitboxLabel = Instance.new("TextLabel")
-showHitboxLabel.Size = UDim2.new(0, 130, 0, 30)
-showHitboxLabel.Position = UDim2.new(0, 15, 0, 88)
-showHitboxLabel.BackgroundTransparency = 1
-showHitboxLabel.Text = "Show Hitbox:"
-showHitboxLabel.TextColor3 = THEME.TextWhite
-showHitboxLabel.Font = Enum.Font.Gotham
-showHitboxLabel.TextSize = 12
-showHitboxLabel.TextXAlignment = Enum.TextXAlignment.Left
-showHitboxLabel.ZIndex = 1001
-showHitboxLabel.Parent = hitboxModal
-
-local showHitboxToggle = Instance.new("TextButton")
-showHitboxToggle.Size = UDim2.new(0, 110, 0, 30)
-showHitboxToggle.Position = UDim2.new(1, -125, 0, 88)
-showHitboxToggle.Text = showHitbox and "ON" or "OFF"
-showHitboxToggle.TextColor3 = THEME.TextWhite
-showHitboxToggle.Font = Enum.Font.GothamBold
-showHitboxToggle.TextSize = 12
-showHitboxToggle.ZIndex = 1001
-showHitboxToggle.Parent = hitboxModal
-applyVoidStyle(showHitboxToggle, showHitbox and THEME.Selected or THEME.RedAccent)
-
--- Save Button
-local hSaveBtn = Instance.new("TextButton")
-hSaveBtn.Size = UDim2.new(0, 80, 0, 28)
-hSaveBtn.Position = UDim2.new(1, -95, 1, -36)
-hSaveBtn.Text = "Save"
-hSaveBtn.Font = Enum.Font.GothamBold
-hSaveBtn.TextSize = 13
-hSaveBtn.TextColor3 = THEME.TextWhite
-hSaveBtn.ZIndex = 1001
-hSaveBtn.Parent = hitboxModal
-applyVoidStyle(hSaveBtn, THEME.Selected)
-
--- Hitbox Application Engine
-local function applyHitboxToPlayer(player)
-	if player == LocalPlayer or not player.Character then return end
-	local char = player.Character
-
-	-- 1. PURGE SPAWN FORCEFIELDS (Stops Roblox from rendering the glowing shield box on spawn)
-	for _, child in ipairs(char:GetChildren()) do
-		if child:IsA("ForceField") then
-			child:Destroy()
-		end
-	end
-
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if hrp then
-		-- 2. PURGE ADORMENTS / HIGHLIGHTS attached to HRP
-		for _, obj in ipairs(hrp:GetChildren()) do
-			if obj:IsA("SelectionBox") or obj:IsA("BoxHandleAdornment") or obj:IsA("Highlight") then
-				obj:Destroy()
-			end
-		end
-
-		if hitboxEnabled then
-			hrp.Size = Vector3.new(hSize, hSize, hSize)
-			hrp.CanCollide = false
-			hrp.CanQuery = false -- Stops raycasts / mouse clicks from catching on the box
-			hrp.Material = Enum.Material.Plastic
-			
-			if showHitbox then
-				hrp.Transparency = 0.7 -- Semi-transparent plastic
-			else
-				hrp.Transparency = 1 -- Pure invisible when Show Hitbox is OFF
-			end
-		else
-			hrp.Size = Vector3.new(2, 2, 1)
-			hrp.Transparency = 1
-			hrp.CanQuery = true
-			hrp.Material = Enum.Material.Plastic
-		end
-	end
-end
-
-local function updateHitboxes()
-	for _, player in ipairs(Players:GetPlayers()) do
-		applyHitboxToPlayer(player)
-	end
-end
-
--- Automatic Respawn Listener
-local function setupPlayerHitboxListener(player)
-	if player == LocalPlayer then return end
-	
-	player.CharacterAdded:Connect(function(char)
-		-- Instantly destroy any ForceField placed on spawn
-		char.ChildAdded:Connect(function(child)
-			if child:IsA("ForceField") then
-				child:Destroy()
-			end
-		end)
-
-		char:WaitForChild("HumanoidRootPart", 5)
-		task.wait(0.1)
-		applyHitboxToPlayer(player)
-	end)
-end
-
--- Listen to current and future players spawning
-for _, player in ipairs(Players:GetPlayers()) do
-	setupPlayerHitboxListener(player)
-end
-
-Players.PlayerAdded:Connect(setupPlayerHitboxListener)
-
--- Continuous Refresh Loop
-task.spawn(function()
-	while task.wait(0.2) do
-		updateHitboxes()
-	end
-end)
-
-local function toggleHitbox()
-	hitboxEnabled = not hitboxEnabled
-	updateHitboxes()
-	updateAllButtonStrokes()
-end
-
--- Long Hold Detection (1 second) for 🎯 button
-local holdTimer = nil
-local longPressed = false
-local pressStart = 0
-
-hitboxButton.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		longPressed = false
-		pressStart = tick()
-		holdTimer = task.delay(1, function()
-			longPressed = true
-			hitboxModal.Visible = true
-		end)
-	end
-end)
-
-hitboxButton.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		if holdTimer then
-			task.cancel(holdTimer)
-			holdTimer = nil
-		end
-		if not longPressed and (tick() - pressStart) < 1 then
-			toggleHitbox()
-		end
-	end
-end)
-
-bindAction(showHitboxToggle, function()
-	showHitbox = not showHitbox
-	showHitboxToggle.Text = showHitbox and "ON" or "OFF"
-	applyVoidStyle(showHitboxToggle, showHitbox and THEME.Selected or THEME.RedAccent)
-end)
-
-bindAction(hSaveBtn, function()
-	local num = tonumber(hSizeBox.Text)
-	if num and num > 0 then
-		hSize = num
-	else
-		hSizeBox.Text = tostring(hSize)
-	end
-	updateHitboxes()
-	hitboxModal.Visible = false
-end)
-
-bindAction(hCloseBtn, function()
-	hitboxModal.Visible = false
 end)
 
 -- 8. STROKE UPDATE SYSTEM
@@ -600,8 +328,6 @@ function updateAllButtonStrokes()
 				targetColor = phantomModeEnabled and THEME.Selected or THEME.AccentNeon
 			elseif item.gui == diamondButton then
 				targetColor = diamondMagnetEnabled and THEME.Selected or THEME.AccentNeon
-			elseif item.gui == hitboxButton then
-				targetColor = hitboxEnabled and THEME.Selected or THEME.AccentNeon
 			end
 
 			TweenService:Create(item.stroke, TweenInfo.new(0.3), { Color = targetColor }):Play()
@@ -766,7 +492,17 @@ local function refreshGrudgeGUI()
 		btn.Parent = lowerScroll
 
 		local isSel = selectedLower[item.Name]
-		applyVoidStyle(btn, isSel and Color3.fromRGB(200, 60, 60) or THEME.AccentNeon)
+		local isInServer = Players:FindFirstChild(item.Name) ~= nil
+		
+		-- Red outline if player is present in server, standard red highlight if selected
+		local outlineColor = THEME.AccentNeon
+		if isSel then
+			outlineColor = Color3.fromRGB(200, 60, 60)
+		elseif isInServer then
+			outlineColor = THEME.RedAccent
+		end
+
+		applyVoidStyle(btn, outlineColor)
 		if isSel then btn.BackgroundColor3 = Color3.fromRGB(70, 20, 20) end
 
 		bindAction(btn, function()
