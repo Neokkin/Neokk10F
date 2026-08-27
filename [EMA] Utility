@@ -1,26 +1,38 @@
---[[
-    ================================================================
-    STANDALONE UTILITY SCRIPT (💎, 👻, 🕵️)
-    ================================================================
-    - Phantom Mode Engine (👻): Toggles character touch interests.
-    - Diamond Magnet Engine (💎): Magnetically pulls Diamond/DiamondDrop MeshParts to player.
-    - Dynamic Soul Snatch Button: Pop-up button near hotbar that ONLY appears when a "Soul" is found in Workspace.
-    - Grudge Holder Manager (🕵️): GUI for managing server players vs stored grudges list.
-    - Immediate Cleanup: Auto-deletes AntiCheatNPCs & Diamonds on script execution.
-    - Protection Systems: Deletes CameraShake from StarterPack & prevents/instantly purges "Blind" in LocalPlayer's PlayerGui.
-]]
+-- ================================================================
+-- STANDALONE UTILITY SCRIPT (💎, 👻, 🕵️)
+-- ================================================================
+-- - Phantom Mode Engine (👻): Toggles character touch interests.
+-- - Diamond Magnet Engine (💎): Magnetically pulls Diamond/DiamondDrop MeshParts to player.
+-- - Dynamic Soul Snatch Button: Pop-up button near hotbar that ONLY appears when a "Soul" is found in Workspace.
+-- - Grudge Holder Manager (🕵️): GUI for managing server players vs stored grudges list.
+-- - Immediate Cleanup: Auto-deletes AntiCheatNPCs & Diamonds on script execution.
+-- - Protection Systems: Deletes CameraShake from StarterPack & prevents/instantly purges "Blind" in LocalPlayer's PlayerGui.
 
--- AUTO RE-EXECUTION ON TELEPORT / SERVER HOP
+-- AUTO RE-EXECUTION ON TELEPORT / SERVER HOP (SAME GAME ONLY)
 local queueOnTeleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport)
+local currentPlaceId = game.PlaceId
 
-if queueOnTeleport then
-    pcall(function()
-        queueOnTeleport([[
-            task.wait(2)
-            loadstring(game:HttpGet("https://raw.githubusercontent.com/Neokkin/Neokk10F/refs/heads/main/%5BEMA%5D%20Utility"))()
-        ]])
-    end)
+local function setAutoExecution(enable)
+	if queueOnTeleport then
+		if enable then
+			pcall(function()
+				queueOnTeleport(string.format([[
+					task.wait(2)
+					if game.PlaceId == %d then
+						loadstring(game:HttpGet("https://raw.githubusercontent.com/Neokkin/Neokk10F/refs/heads/main/%%5BEMA%%5D%%20Utility"))()
+					end
+				]], currentPlaceId))
+			end)
+		else
+			pcall(function()
+				queueOnTeleport("")
+			end)
+		end
+	end
 end
+
+-- Initialize auto-execution for same game only
+setAutoExecution(true)
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -350,9 +362,28 @@ grudgeModal.ZIndex = 1000
 grudgeModal.Parent = screenGui
 applyVoidStyle(grudgeModal)
 
+-- TOP-LEFT STOP AUTO-EXEC BUTTON
+local stopAutoExecBtn = Instance.new("TextButton")
+stopAutoExecBtn.Name = "StopAutoExecBtn"
+stopAutoExecBtn.Size = UDim2.new(0, 32, 0, 26)
+stopAutoExecBtn.Position = UDim2.new(0, 8, 0, 6)
+stopAutoExecBtn.Text = "[X]"
+stopAutoExecBtn.Font = Enum.Font.GothamBold
+stopAutoExecBtn.TextSize = 13
+stopAutoExecBtn.TextColor3 = THEME.RedAccent
+stopAutoExecBtn.ZIndex = 1001
+stopAutoExecBtn.Parent = grudgeModal
+applyVoidStyle(stopAutoExecBtn, Color3.fromRGB(220, 60, 60))
+
+bindAction(stopAutoExecBtn, function()
+	setAutoExecution(false)
+	stopAutoExecBtn.Text = "OFF"
+	stopAutoExecBtn.TextColor3 = Color3.fromRGB(120, 120, 120)
+end)
+
 local gTitle = Instance.new("TextLabel")
-gTitle.Size = UDim2.new(1, -40, 0, 36)
-gTitle.Position = UDim2.new(0, 15, 0, 2)
+gTitle.Size = UDim2.new(1, -80, 0, 36)
+gTitle.Position = UDim2.new(0, 46, 0, 2)
 gTitle.BackgroundTransparency = 1
 gTitle.Text = "Grudge Holder Manager"
 gTitle.TextColor3 = THEME.TextWhite
