@@ -13,15 +13,15 @@ local TeleportService = game:GetService("TeleportService")
 local LocalPlayer = Players.LocalPlayer
 local connections = {}
 local originalAttributes = {}
-local lockedAttributes = {}
+local lockedAttributes = {} -- Store structure: lockedAttributes[fullKey] = { object = inst, isValueObj = bool, attrName = name, value = val }
 local loadoutToggledAttributes = {} -- Tracks attributes toggled with {#}
 local savedLoadouts = {} -- Stores named loadouts
 local selectedLoadoutName = nil
 local autoLoadName = nil
-local currentTab = 1 -- 1 = Str/Num, 2 = Booleans
 local targetType = "Player" -- "Player", "Character", "Tools"
 local selectedToolName = nil
-local currentAttrConnection = nil
+local currentAttrConnections = {}
+local isExpandSearch = false
 
 local JSON_FILE_NAME = "AttributeLoadout.json"
 local AUTO_EXECUTE_URL = "https://raw.githubusercontent.com/Neokkin/Neokk10F/refs/heads/main/Attribute Setting"
@@ -41,6 +41,47 @@ if queueFunc then
     table.insert(connections, LocalPlayer.OnTeleport:Connect(function()
         pcall(function() queueFunc(teleportScript) end)
     end))
+end
+
+-- ValueBase Helpers (NumberValue, IntValue, StringValue, BoolValue, etc.)
+local function isSupportedValueObject(inst)
+    if not inst or not inst:IsA("ValueBase") then return false end
+    return inst:IsA("NumberValue") or inst:IsA("IntValue")
+        or inst:IsA("StringValue") or inst:IsA("BoolValue")
+        or inst:IsA("DoubleConstrainedValue") or inst:IsA("IntConstrainedValue")
+end
+
+local function getValueObjectType(inst)
+    if inst:IsA("NumberValue") or inst:IsA("IntValue") or inst:IsA("DoubleConstrainedValue") or inst:IsA("IntConstrainedValue") then
+        return "number"
+    elseif inst:IsA("StringValue") then
+        return "string"
+    elseif inst:IsA("BoolValue") then
+        return "boolean"
+    end
+    return nil
+end
+
+-- Exclude Roblox core stuff & Backpack under "Player" target
+local function isExcludedPlayerChild(obj)
+    if targetType ~= "Player" then return false end
+    if obj == LocalPlayer then return false end
+
+    local current = obj
+    while current and current ~= LocalPlayer do
+        local name = current.Name:lower()
+        local className = current.ClassName
+        
+        if current.Name == "PlayerGui" or current.Name == "Backpack" 
+           or current.Name == "PlayerScripts" or current.Name == "StarterGear"
+           or className == "PlayerGui" or className == "Backpack" 
+           or className == "PlayerScripts" or className == "StarterGear"
+           or name:find("chat") or name:find("core") then
+            return true
+        end
+        current = current.Parent
+    end
+    return false
 end
 
 -- File I/O for JSON Persistence
@@ -66,7 +107,7 @@ local function loadFromFile()
                 savedLoadouts = result.loadouts or {}
                 autoLoadName = result.autoLoad
             else
-                savedLoadouts = result -- Backward compatibility
+                savedLoadouts = result
             end
         end
     end
@@ -74,7 +115,39 @@ end
 
 loadFromFile()
 
--- Target Object Resolution (Player, Character, Tools)
+-- Target Object & Hierarchy Resolution
+local function getObjectPath(root, obj)
+    if not root or not obj then return "" end
+    if obj == root then return root.Name end
+    local path = obj.Name
+    local current = obj.Parent
+    while current and current ~= root do
+        path = current.Name .. "." .. path
+        current = current.Parent
+    end
+    if current == root then
+        path = root.Name .. "." .. path
+    end
+    return path
+end
+
+local function findObjectByPath(root, path)
+    if not root or not path then return nil end
+    if path == root.Name then return root end
+    
+    local prefix = root.Name .. "."
+    if path:sub(1, #prefix) == prefix then
+        local relative = path:sub(#prefix + 1)
+        local current = root
+        for segment in string.gmatch(relative, "[^%.]+") do
+            current = current:FindFirstChild(segment)
+            if not current then return nil end
+        end
+        return current
+    end
+    return nil
+end
+
 local function getAllTools()
     local toolNames = {}
     local seen = {}
@@ -110,7 +183,6 @@ local function getTargetTool()
     end
     if not selectedToolName then return nil end
 
-    -- Check Character first then Backpack
     local char = LocalPlayer.Character
     if char then
         local tool = char:FindFirstChild(selectedToolName)
@@ -158,15 +230,20 @@ if pcall(function() local _ = CoreGui.Name end) then
     targetParent = CoreGui
 end
 
+local function clearAttrConnections()
+    for _, conn in ipairs(currentAttrConnections) do
+        if conn and conn.Connected then conn:Disconnect() end
+    end
+    table.clear(currentAttrConnections)
+end
+
 local function fullCleanup()
     for _, conn in ipairs(connections) do
         if conn and conn.Connected then conn:Disconnect() end
     end
     table.clear(connections)
     table.clear(lockedAttributes)
-    if currentAttrConnection and currentAttrConnection.Connected then
-        currentAttrConnection:Disconnect()
-    end
+    clearAttrConnections()
     
     local existingGui = targetParent:FindFirstChild(GUI_NAME)
     if existingGui then existingGui:Destroy() end
@@ -211,8 +288,8 @@ applyNeonStroke(ToggleBtn, Color3.fromRGB(255, 0, 128), 2)
 -- Main Frame
 local MainFrame = Instance.new("Frame")
 MainFrame.Name = "MainFrame"
-MainFrame.Size = UDim2.new(0, 340, 0, 300)
-MainFrame.Position = UDim2.new(0.5, -170, 0.4, -150)
+MainFrame.Size = UDim2.new(0, 350, 0, 320)
+MainFrame.Position = UDim2.new(0.5, -175, 0.4, -160)
 MainFrame.BackgroundColor3 = Color3.fromRGB(16, 10, 26)
 MainFrame.ClipsDescendants = false
 MainFrame.Visible = false
@@ -237,8 +314,8 @@ HeaderCorner.Parent = Header
 -- Revert Button
 local RevertBtn = Instance.new("TextButton")
 RevertBtn.Name = "RevertBtn"
-RevertBtn.Size = UDim2.new(0, 30, 0, 22)
-RevertBtn.Position = UDim2.new(0, 5, 0, 4)
+RevertBtn.Size = UDim2.new(0, 26, 0, 22)
+RevertBtn.Position = UDim2.new(0, 4, 0, 4)
 RevertBtn.BackgroundColor3 = Color3.fromRGB(45, 20, 60)
 RevertBtn.Text = "<<"
 RevertBtn.TextColor3 = Color3.fromRGB(0, 240, 255)
@@ -250,36 +327,49 @@ applyNeonStroke(RevertBtn, Color3.fromRGB(0, 240, 255), 1)
 -- Loadout Popup Toggle Button
 local LoadoutToggleBtn = Instance.new("TextButton")
 LoadoutToggleBtn.Name = "LoadoutToggleBtn"
-LoadoutToggleBtn.Size = UDim2.new(0, 60, 0, 22)
-LoadoutToggleBtn.Position = UDim2.new(0, 40, 0, 4)
+LoadoutToggleBtn.Size = UDim2.new(0, 52, 0, 22)
+LoadoutToggleBtn.Position = UDim2.new(0, 33, 0, 4)
 LoadoutToggleBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 55)
 LoadoutToggleBtn.Text = "Loadout"
 LoadoutToggleBtn.TextColor3 = Color3.fromRGB(255, 0, 128)
-LoadoutToggleBtn.TextSize = 11
+LoadoutToggleBtn.TextSize = 10
 LoadoutToggleBtn.Font = Enum.Font.SourceSansBold
 LoadoutToggleBtn.Parent = Header
 applyNeonStroke(LoadoutToggleBtn, Color3.fromRGB(255, 0, 128), 1)
 
+-- Expand Search Toggle Button
+local ExpandSearchBtn = Instance.new("TextButton")
+ExpandSearchBtn.Name = "ExpandSearchBtn"
+ExpandSearchBtn.Size = UDim2.new(0, 88, 0, 22)
+ExpandSearchBtn.Position = UDim2.new(0, 88, 0, 4)
+ExpandSearchBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35)
+ExpandSearchBtn.Text = "Expand Search"
+ExpandSearchBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+ExpandSearchBtn.TextSize = 10
+ExpandSearchBtn.Font = Enum.Font.SourceSansBold
+ExpandSearchBtn.Parent = Header
+applyNeonStroke(ExpandSearchBtn, Color3.fromRGB(80, 50, 100), 1)
+
 -- Title
 local TitleLabel = Instance.new("TextLabel")
-TitleLabel.Size = UDim2.new(1, -140, 1, 0)
-TitleLabel.Position = UDim2.new(0, 105, 0, 0)
+TitleLabel.Size = UDim2.new(1, -210, 1, 0)
+TitleLabel.Position = UDim2.new(0, 180, 0, 0)
 TitleLabel.BackgroundTransparency = 1
 TitleLabel.Text = "ATTRIBUTES"
 TitleLabel.TextColor3 = Color3.fromRGB(255, 0, 128)
-TitleLabel.TextSize = 13
+TitleLabel.TextSize = 12
 TitleLabel.Font = Enum.Font.FredokaOne
 TitleLabel.Parent = Header
 
 -- Close Button
 local CloseBtn = Instance.new("TextButton")
 CloseBtn.Name = "CloseBtn"
-CloseBtn.Size = UDim2.new(0, 26, 0, 22)
-CloseBtn.Position = UDim2.new(1, -31, 0, 4)
+CloseBtn.Size = UDim2.new(0, 24, 0, 22)
+CloseBtn.Position = UDim2.new(1, -28, 0, 4)
 CloseBtn.BackgroundColor3 = Color3.fromRGB(60, 15, 30)
 CloseBtn.Text = "X"
 CloseBtn.TextColor3 = Color3.fromRGB(255, 50, 100)
-CloseBtn.TextSize = 13
+CloseBtn.TextSize = 12
 CloseBtn.Font = Enum.Font.SourceSansBold
 CloseBtn.Parent = Header
 applyNeonStroke(CloseBtn, Color3.fromRGB(255, 0, 128), 1)
@@ -372,63 +462,21 @@ ToolsDropdownLayout.Padding = UDim.new(0, 3)
 ToolsDropdownLayout.SortOrder = Enum.SortOrder.LayoutOrder
 ToolsDropdownLayout.Parent = ToolsDropdownScroll
 
--- Data Type Tab Controls (Str & Num / Booleans)
-local TabContainer = Instance.new("Frame")
-TabContainer.Size = UDim2.new(1, -10, 0, 22)
-TabContainer.Position = UDim2.new(0, 5, 0, 60)
-TabContainer.BackgroundTransparency = 1
-TabContainer.Parent = MainFrame
+-- Single Scrolling List for File/Parent Hierarchical Display
+local MainScroll = Instance.new("ScrollingFrame")
+MainScroll.Name = "MainScroll"
+MainScroll.Size = UDim2.new(1, -10, 1, -66)
+MainScroll.Position = UDim2.new(0, 5, 0, 60)
+MainScroll.BackgroundTransparency = 1
+MainScroll.ScrollBarThickness = 4
+MainScroll.ScrollBarImageColor3 = Color3.fromRGB(255, 0, 128)
+MainScroll.Visible = true
+MainScroll.Parent = MainFrame
 
-local Tab1Btn = Instance.new("TextButton")
-Tab1Btn.Size = UDim2.new(0.49, 0, 1, 0)
-Tab1Btn.Position = UDim2.new(0, 0, 0, 0)
-Tab1Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55)
-Tab1Btn.Text = "Str & Num"
-Tab1Btn.TextColor3 = Color3.fromRGB(0, 240, 255)
-Tab1Btn.TextSize = 11
-Tab1Btn.Font = Enum.Font.SourceSansBold
-Tab1Btn.Parent = TabContainer
-applyNeonStroke(Tab1Btn, Color3.fromRGB(0, 240, 255), 1)
-
-local Tab2Btn = Instance.new("TextButton")
-Tab2Btn.Size = UDim2.new(0.49, 0, 1, 0)
-Tab2Btn.Position = UDim2.new(0.51, 0, 0, 0)
-Tab2Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35)
-Tab2Btn.Text = "Booleans"
-Tab2Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
-Tab2Btn.TextSize = 11
-Tab2Btn.Font = Enum.Font.SourceSansBold
-Tab2Btn.Parent = TabContainer
-applyNeonStroke(Tab2Btn, Color3.fromRGB(80, 50, 100), 1)
-
--- Scrolling Lists
-local Tab1Scroll = Instance.new("ScrollingFrame")
-Tab1Scroll.Size = UDim2.new(1, -10, 1, -90)
-Tab1Scroll.Position = UDim2.new(0, 5, 0, 86)
-Tab1Scroll.BackgroundTransparency = 1
-Tab1Scroll.ScrollBarThickness = 4
-Tab1Scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 0, 128)
-Tab1Scroll.Visible = true
-Tab1Scroll.Parent = MainFrame
-
-local Tab1Layout = Instance.new("UIListLayout")
-Tab1Layout.Padding = UDim.new(0, 4)
-Tab1Layout.SortOrder = Enum.SortOrder.LayoutOrder
-Tab1Layout.Parent = Tab1Scroll
-
-local Tab2Scroll = Instance.new("ScrollingFrame")
-Tab2Scroll.Size = UDim2.new(1, -10, 1, -90)
-Tab2Scroll.Position = UDim2.new(0, 5, 0, 86)
-Tab2Scroll.BackgroundTransparency = 1
-Tab2Scroll.ScrollBarThickness = 4
-Tab2Scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 240, 255)
-Tab2Scroll.Visible = false
-Tab2Scroll.Parent = MainFrame
-
-local Tab2Layout = Instance.new("UIListLayout")
-Tab2Layout.Padding = UDim.new(0, 4)
-Tab2Layout.SortOrder = Enum.SortOrder.LayoutOrder
-Tab2Layout.Parent = Tab2Scroll
+local MainLayout = Instance.new("UIListLayout")
+MainLayout.Padding = UDim.new(0, 5)
+MainLayout.SortOrder = Enum.SortOrder.LayoutOrder
+MainLayout.Parent = MainScroll
 
 -- Resize Grip
 local ResizeGrip = Instance.new("TextButton")
@@ -499,7 +547,6 @@ LoadoutNameInput.ClearTextOnFocus = false
 LoadoutNameInput.Parent = BottomPanel
 applyNeonStroke(LoadoutNameInput, Color3.fromRGB(0, 240, 255), 1)
 
--- Save, Load, Auto, Edit, Delete Action Buttons
 local SaveBtn = Instance.new("TextButton")
 SaveBtn.Size = UDim2.new(0.18, 0, 0, 22)
 SaveBtn.Position = UDim2.new(0, 0, 0, 26)
@@ -564,7 +611,6 @@ local function resetConfirmations()
     EditBtn.BackgroundColor3 = Color3.fromRGB(60, 25, 45)
 end
 
--- Loadout List Rendering with Green Auto Load Highlight Indicator
 local function renderLoadoutList()
     for _, item in ipairs(LoadoutScroll:GetChildren()) do
         if item:IsA("TextButton") then item:Destroy() end
@@ -603,7 +649,6 @@ local function renderLoadoutList()
     LoadoutScroll.CanvasSize = UDim2.new(0, 0, 0, LoadoutListLayout.AbsoluteContentSize.Y + 5)
 end
 
--- Render Tools Dropdown Menu
 local function renderToolsDropdown()
     for _, child in ipairs(ToolsDropdownScroll:GetChildren()) do
         if child:IsA("TextButton") then child:Destroy() end
@@ -670,14 +715,63 @@ SaveBtn.MouseButton1Click:Connect(function()
         if isToggled then hasToggledAttributes = true; break end
     end
 
+    local rawObjects = { targetObj }
+    if isExpandSearch then
+        for _, desc in ipairs(targetObj:GetDescendants()) do
+            table.insert(rawObjects, desc)
+        end
+    end
+
+    local objectsToScan = {}
+    for _, obj in ipairs(rawObjects) do
+        if not isExcludedPlayerChild(obj) then
+            table.insert(objectsToScan, obj)
+        end
+    end
+
     local attrSnapshot = {}
     local lockSnapshot = {}
+    local processedValueObjs = {}
 
-    for k, v in pairs(targetObj:GetAttributes()) do
-        if not hasToggledAttributes or loadoutToggledAttributes[k] then
-            attrSnapshot[k] = v
-            if lockedAttributes[k] ~= nil then
-                lockSnapshot[k] = lockedAttributes[k]
+    for _, obj in ipairs(objectsToScan) do
+        local path = getObjectPath(targetObj, obj)
+        
+        -- Regular attributes
+        for k, v in pairs(obj:GetAttributes()) do
+            local fullKey = path .. "." .. k
+            if not hasToggledAttributes or loadoutToggledAttributes[fullKey] then
+                attrSnapshot[fullKey] = {
+                    path = path,
+                    attrName = k,
+                    value = v,
+                    isValueObj = false
+                }
+                if lockedAttributes[fullKey] ~= nil then
+                    lockSnapshot[fullKey] = lockedAttributes[fullKey].value
+                end
+            end
+        end
+
+        -- ValueObjects (NumberValue, IntValue, StringValue, BoolValue)
+        for _, child in ipairs(obj:GetChildren()) do
+            if isSupportedValueObject(child) and not processedValueObjs[child] then
+                processedValueObjs[child] = true
+                local k = child.Name
+                local v = child.Value
+                local valPath = getObjectPath(targetObj, child)
+                local fullKey = path .. ".[Val]." .. k
+                if not hasToggledAttributes or loadoutToggledAttributes[fullKey] then
+                    attrSnapshot[fullKey] = {
+                        path = path,
+                        valPath = valPath,
+                        attrName = k,
+                        value = v,
+                        isValueObj = true
+                    }
+                    if lockedAttributes[fullKey] ~= nil then
+                        lockSnapshot[fullKey] = lockedAttributes[fullKey].value
+                    end
+                end
             end
         end
     end
@@ -703,12 +797,43 @@ local function applyLoadout(name)
 
     table.clear(lockedAttributes)
 
-    for k, v in pairs(data.attributes) do
-        targetObj:SetAttribute(k, v)
-    end
+    for fullKey, item in pairs(data.attributes) do
+        if item.isValueObj then
+            local valObj = nil
+            if item.valPath then
+                valObj = findObjectByPath(targetObj, item.valPath)
+            else
+                local parentObj = findObjectByPath(targetObj, item.path)
+                if parentObj then
+                    valObj = parentObj:FindFirstChild(item.attrName)
+                end
+            end
 
-    for k, v in pairs(data.locks) do
-        lockedAttributes[k] = v
+            if valObj and valObj:IsA("ValueBase") then
+                pcall(function() valObj.Value = item.value end)
+                if data.locks and data.locks[fullKey] ~= nil then
+                    lockedAttributes[fullKey] = {
+                        object = valObj,
+                        isValueObj = true,
+                        attrName = item.attrName,
+                        value = data.locks[fullKey]
+                    }
+                end
+            end
+        else
+            local obj = findObjectByPath(targetObj, item.path)
+            if obj then
+                pcall(function() obj:SetAttribute(item.attrName, item.value) end)
+                if data.locks and data.locks[fullKey] ~= nil then
+                    lockedAttributes[fullKey] = {
+                        object = obj,
+                        isValueObj = false,
+                        attrName = item.attrName,
+                        value = data.locks[fullKey]
+                    }
+                end
+            end
+        end
     end
 
     isShieldOn = data.shield
@@ -726,7 +851,6 @@ LoadBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Auto Load Button Toggle
 AutoLoadBtn.MouseButton1Click:Connect(function()
     resetConfirmations()
     if not selectedLoadoutName then return end
@@ -778,6 +902,22 @@ end)
 
 LoadoutToggleBtn.MouseButton1Click:Connect(function()
     LoadoutFrame.Visible = not LoadoutFrame.Visible
+end)
+
+ExpandSearchBtn.MouseButton1Click:Connect(function()
+    isExpandSearch = not isExpandSearch
+    if isExpandSearch then
+        ExpandSearchBtn.BackgroundColor3 = Color3.fromRGB(35, 60, 55)
+        ExpandSearchBtn.TextColor3 = Color3.fromRGB(0, 240, 255)
+        applyNeonStroke(ExpandSearchBtn, Color3.fromRGB(0, 240, 255), 1)
+    else
+        ExpandSearchBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35)
+        ExpandSearchBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+        applyNeonStroke(ExpandSearchBtn, Color3.fromRGB(80, 50, 100), 1)
+    end
+    if getgenv().VaporwaveRefreshAttributes then
+        getgenv().VaporwaveRefreshAttributes()
+    end
 end)
 
 table.insert(connections, ToggleBtn.MouseButton1Click:Connect(function()
@@ -851,122 +991,206 @@ attachDoubleClick(RevertBtn, function()
     end
 end)
 
--- Tabs Switch
-Tab1Btn.MouseButton1Click:Connect(function()
-    currentTab = 1
-    Tab1Scroll.Visible = true; Tab2Scroll.Visible = false
-    Tab1Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); Tab1Btn.TextColor3 = Color3.fromRGB(0, 240, 255)
-    Tab2Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); Tab2Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
-end)
-
-Tab2Btn.MouseButton1Click:Connect(function()
-    currentTab = 2
-    Tab1Scroll.Visible = false; Tab2Scroll.Visible = true
-    Tab2Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); Tab2Btn.TextColor3 = Color3.fromRGB(255, 0, 128)
-    Tab1Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); Tab1Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
-end)
-
--- Dragging & Resizing Logic
+--================================================================--
+--          SMOOTH DRAGGING & RESIZING (BOUND TO SCREEN)          --
+--================================================================--
 local isDragging, isResizing = false, false
-local dragStart, resizeStart = Vector3.new(), Vector3.new()
-local startPos, startSize = UDim2.new(), UDim2.new()
+local dragStart, resizeStart = Vector2.new(), Vector2.new()
+local startPos, startSize = Vector2.new(), Vector2.new()
 
 Header.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isDragging = true; dragStart = input.Position; startPos = MainFrame.Position
+        isDragging = true
+        dragStart = Vector2.new(input.Position.X, input.Position.Y)
+        startPos = Vector2.new(MainFrame.AbsolutePosition.X, MainFrame.AbsolutePosition.Y)
     end
 end)
 
 ResizeGrip.InputBegan:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isResizing = true; resizeStart = input.Position; startSize = MainFrame.Size
+        isResizing = true
+        resizeStart = Vector2.new(input.Position.X, input.Position.Y)
+        startSize = Vector2.new(MainFrame.AbsoluteSize.X, MainFrame.AbsoluteSize.Y)
     end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isDragging = false; isResizing = false
+        isDragging = false
+        isResizing = false
     end
 end)
 
 table.insert(connections, UserInputService.InputChanged:Connect(function(input)
     if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+        local camera = workspace.CurrentCamera
+        local viewport = camera and camera.ViewportSize or Vector2.new(800, 600)
+        
         if isDragging then
-            local delta = input.Position - dragStart
-            local newX = math.clamp(startPos.X.Offset + delta.X, 0, viewport.X - MainFrame.AbsoluteSize.X)
-            local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, viewport.Y - MainFrame.AbsoluteSize.Y)
-            MainFrame.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
+            local currentInput = Vector2.new(input.Position.X, input.Position.Y)
+            local delta = currentInput - dragStart
+            
+            local maxFrameX = math.max(0, viewport.X - MainFrame.AbsoluteSize.X)
+            local maxFrameY = math.max(0, viewport.Y - MainFrame.AbsoluteSize.Y)
+            
+            local newX = math.clamp(startPos.X + delta.X, 0, maxFrameX)
+            local newY = math.clamp(startPos.Y + delta.Y, 0, maxFrameY)
+            
+            MainFrame.Position = UDim2.new(0, newX, 0, newY)
         elseif isResizing then
-            local delta = input.Position - resizeStart
-            local newWidth = math.clamp(startSize.X.Offset + delta.X, 260, viewport.X - MainFrame.AbsolutePosition.X)
-            local newHeight = math.clamp(startSize.Y.Offset + delta.Y, 200, viewport.Y - MainFrame.AbsolutePosition.Y)
+            local currentInput = Vector2.new(input.Position.X, input.Position.Y)
+            local delta = currentInput - resizeStart
+            
+            local maxWidth = math.max(260, viewport.X - MainFrame.AbsolutePosition.X)
+            local maxHeight = math.max(200, viewport.Y - MainFrame.AbsolutePosition.Y)
+            
+            local newWidth = math.clamp(startSize.X + delta.X, 260, maxWidth)
+            local newHeight = math.clamp(startSize.Y + delta.Y, 200, maxHeight)
+            
             MainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
         end
     end
 end))
 
--- Attribute Rendering Logic
+--================================================================--
+--              FILE / PARENT HIERARCHY ATTRIBUTE RENDERING       --
+--================================================================--
 local function renderAttributes()
-    for _, child in ipairs(Tab1Scroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
-    for _, child in ipairs(Tab2Scroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
-
-    local targetObj = getTargetObject()
-
-    if currentAttrConnection and currentAttrConnection.Connected then
-        currentAttrConnection:Disconnect()
-        currentAttrConnection = nil
+    for _, child in ipairs(MainScroll:GetChildren()) do 
+        if child:IsA("Frame") then child:Destroy() end 
     end
 
+    clearAttrConnections()
+
+    local targetObj = getTargetObject()
     if not targetObj then return end
 
-    currentAttrConnection = targetObj.AttributeChanged:Connect(function()
-        renderAttributes()
-    end)
+    local rawObjects = { targetObj }
+    if isExpandSearch then
+        for _, desc in ipairs(targetObj:GetDescendants()) do
+            table.insert(rawObjects, desc)
+        end
+    end
 
-    local attributes = targetObj:GetAttributes()
-    local attrKeys = {}
-    for key in pairs(attributes) do table.insert(attrKeys, key) end
-    table.sort(attrKeys, function(a, b) return a:lower() < b:lower() end)
+    local objectsToScan = {}
+    for _, obj in ipairs(rawObjects) do
+        if not isExcludedPlayerChild(obj) then
+            table.insert(objectsToScan, obj)
+        end
+    end
 
-    for _, attrName in ipairs(attrKeys) do
-        local attrValue = attributes[attrName]
-        local valueType = type(attrValue)
+    -- Group attributes and ValueObjects by File / Parent Instance
+    local groups = {}
+    local processedValueObjs = {}
 
-        if valueType == "string" or valueType == "number" then
+    for _, obj in ipairs(objectsToScan) do
+        local itemEntries = {}
+
+        -- 1. Scan Standard Attributes
+        local attrs = obj:GetAttributes()
+        for k, v in pairs(attrs) do
+            table.insert(itemEntries, {
+                name = k,
+                value = v,
+                vType = type(v),
+                isValueObj = false
+            })
+        end
+
+        -- 2. Scan Child ValueObjects (NumberValue, IntValue, StringValue, BoolValue, etc.)
+        for _, child in ipairs(obj:GetChildren()) do
+            if isSupportedValueObject(child) and not processedValueObjs[child] then
+                processedValueObjs[child] = true
+                local vType = getValueObjectType(child)
+                if vType then
+                    table.insert(itemEntries, {
+                        name = child.Name,
+                        value = child.Value,
+                        vType = vType,
+                        isValueObj = true,
+                        valInst = child
+                    })
+                end
+            end
+        end
+
+        if #itemEntries > 0 then
+            table.sort(itemEntries, function(a, b) return a.name:lower() < b.name:lower() end)
+            table.insert(groups, {
+                object = obj,
+                path = getObjectPath(targetObj, obj),
+                entries = itemEntries
+            })
+
+            -- Attach listeners for real-time updates
+            local conn1 = obj.AttributeChanged:Connect(function()
+                renderAttributes()
+            end)
+            table.insert(currentAttrConnections, conn1)
+
+            local conn2 = obj.ChildAdded:Connect(function(child)
+                if isSupportedValueObject(child) then renderAttributes() end
+            end)
+            table.insert(currentAttrConnections, conn2)
+
+            local conn3 = obj.ChildRemoved:Connect(function(child)
+                if isSupportedValueObject(child) then renderAttributes() end
+            end)
+            table.insert(currentAttrConnections, conn3)
+        end
+    end
+
+    table.sort(groups, function(a, b) return a.path:lower() < b.path:lower() end)
+
+    -- Render File Parents & Attributes / ValueObjects
+    for _, group in ipairs(groups) do
+        local FileHeader = Instance.new("Frame")
+        FileHeader.Size = UDim2.new(1, -6, 0, 22)
+        FileHeader.BackgroundColor3 = Color3.fromRGB(32, 18, 50)
+        FileHeader.Parent = MainScroll
+        applyNeonStroke(FileHeader, Color3.fromRGB(255, 0, 128), 1)
+
+        local FileLabel = Instance.new("TextLabel")
+        FileLabel.Size = UDim2.new(1, -8, 1, 0)
+        FileLabel.Position = UDim2.new(0, 4, 0, 0)
+        FileLabel.BackgroundTransparency = 1
+        FileLabel.Text = "📁 " .. group.path
+        FileLabel.TextColor3 = Color3.fromRGB(0, 240, 255)
+        FileLabel.TextSize = 10
+        FileLabel.Font = Enum.Font.FredokaOne
+        FileLabel.TextXAlignment = Enum.TextXAlignment.Left
+        FileLabel.Parent = FileHeader
+
+        for _, entry in ipairs(group.entries) do
+            local attrName = entry.name
+            local attrValue = entry.value
+            local valueType = entry.vType
+            local isValObj = entry.isValueObj
+            local valInst = entry.valInst
+            
+            local fullAttrKey = group.path .. (isValObj and ".[Val]." or ".") .. attrName
+
             local RowFrame = Instance.new("Frame")
-            RowFrame.Size = UDim2.new(1, -6, 0, 32)
+            RowFrame.Size = UDim2.new(1, -6, 0, 28)
             RowFrame.BackgroundColor3 = Color3.fromRGB(22, 14, 36)
-            RowFrame.Parent = Tab1Scroll
+            RowFrame.Parent = MainScroll
             applyNeonStroke(RowFrame, Color3.fromRGB(45, 25, 70), 1)
 
             local NameLabel = Instance.new("TextLabel")
-            NameLabel.Size = UDim2.new(0.32, -2, 1, 0)
-            NameLabel.Position = UDim2.new(0, 4, 0, 0)
+            NameLabel.Size = UDim2.new(0.34, -4, 1, 0)
+            NameLabel.Position = UDim2.new(0, 6, 0, 0)
             NameLabel.BackgroundTransparency = 1
-            NameLabel.Text = attrName
-            NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            NameLabel.Text = (isValObj and "🔹 " or "") .. attrName
+            NameLabel.TextColor3 = isValObj and Color3.fromRGB(180, 220, 255) or Color3.fromRGB(230, 230, 255)
             NameLabel.TextSize = 10
             NameLabel.Font = Enum.Font.SourceSansBold
             NameLabel.TextXAlignment = Enum.TextXAlignment.Left
             NameLabel.Parent = RowFrame
 
-            local InputBox = Instance.new("TextBox")
-            InputBox.Size = UDim2.new(0.38, 0, 0, 18)
-            InputBox.Position = UDim2.new(0.34, 0, 0, 7)
-            InputBox.BackgroundColor3 = Color3.fromRGB(10, 6, 18)
-            InputBox.Text = tostring(attrValue)
-            InputBox.TextColor3 = Color3.fromRGB(0, 240, 255)
-            InputBox.TextSize = 10
-            InputBox.Font = Enum.Font.Code
-            InputBox.ClearTextOnFocus = false
-            InputBox.Parent = RowFrame
-            applyNeonStroke(InputBox, Color3.fromRGB(0, 240, 255), 1)
-
             local LockBtn = Instance.new("TextButton")
-            LockBtn.Size = UDim2.new(0.11, 0, 0, 20)
-            LockBtn.Position = UDim2.new(0.73, 0, 0, 6)
-            LockBtn.BackgroundColor3 = lockedAttributes[attrName] ~= nil and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(30, 18, 48)
+            LockBtn.Size = UDim2.new(0.11, 0, 0, 18)
+            LockBtn.Position = UDim2.new(0.73, 0, 0, 5)
+            LockBtn.BackgroundColor3 = lockedAttributes[fullAttrKey] ~= nil and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(30, 18, 48)
             LockBtn.Text = "§"
             LockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
             LockBtn.TextSize = 11
@@ -975,128 +1199,116 @@ local function renderAttributes()
             applyNeonStroke(LockBtn, Color3.fromRGB(255, 0, 128), 1)
 
             local LoadoutToggleAttrBtn = Instance.new("TextButton")
-            LoadoutToggleAttrBtn.Size = UDim2.new(0.13, 0, 0, 20)
-            LoadoutToggleAttrBtn.Position = UDim2.new(0.85, 0, 0, 6)
-            LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
+            LoadoutToggleAttrBtn.Size = UDim2.new(0.13, 0, 0, 18)
+            LoadoutToggleAttrBtn.Position = UDim2.new(0.85, 0, 0, 5)
+            LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[fullAttrKey] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
             LoadoutToggleAttrBtn.Text = "{#}"
-            LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+            LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[fullAttrKey] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
             LoadoutToggleAttrBtn.TextSize = 10
             LoadoutToggleAttrBtn.Font = Enum.Font.SourceSansBold
             LoadoutToggleAttrBtn.Parent = RowFrame
             applyNeonStroke(LoadoutToggleAttrBtn, Color3.fromRGB(0, 240, 255), 1)
 
-            InputBox.FocusLost:Connect(function(enter)
-                if enter then
-                    local val = (valueType == "number") and (tonumber(InputBox.Text) or attrValue) or InputBox.Text
-                    targetObj:SetAttribute(attrName, val)
-                    if lockedAttributes[attrName] ~= nil then lockedAttributes[attrName] = val end
-                end
-            end)
+            if isValObj and valInst then
+                local connVal = valInst:GetPropertyChangedSignal("Value"):Connect(function()
+                    renderAttributes()
+                end)
+                table.insert(currentAttrConnections, connVal)
+            end
+
+            if valueType == "string" or valueType == "number" then
+                local InputBox = Instance.new("TextBox")
+                InputBox.Size = UDim2.new(0.35, 0, 0, 18)
+                InputBox.Position = UDim2.new(0.36, 0, 0, 5)
+                InputBox.BackgroundColor3 = Color3.fromRGB(10, 6, 18)
+                InputBox.Text = tostring(attrValue)
+                InputBox.TextColor3 = Color3.fromRGB(0, 240, 255)
+                InputBox.TextSize = 10
+                InputBox.Font = Enum.Font.Code
+                InputBox.ClearTextOnFocus = false
+                InputBox.Parent = RowFrame
+                applyNeonStroke(InputBox, Color3.fromRGB(0, 240, 255), 1)
+
+                InputBox.FocusLost:Connect(function(enter)
+                    if enter then
+                        local currentVal = isValObj and valInst.Value or group.object:GetAttribute(attrName)
+                        local val = (valueType == "number") and (tonumber(InputBox.Text) or currentVal) or InputBox.Text
+                        if isValObj then
+                            pcall(function() valInst.Value = val end)
+                        else
+                            group.object:SetAttribute(attrName, val)
+                        end
+                        if lockedAttributes[fullAttrKey] ~= nil then
+                            lockedAttributes[fullAttrKey].value = val
+                        end
+                    end
+                end)
+            elseif valueType == "boolean" then
+                local CheckBox = Instance.new("TextButton")
+                CheckBox.Size = UDim2.new(0.35, 0, 0, 18)
+                CheckBox.Position = UDim2.new(0.36, 0, 0, 5)
+                CheckBox.BackgroundColor3 = attrValue and Color3.fromRGB(0, 180, 120) or Color3.fromRGB(60, 20, 30)
+                CheckBox.Text = attrValue and "[ TRUE ]" or "[ FALSE ]"
+                CheckBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+                CheckBox.TextSize = 9
+                CheckBox.Font = Enum.Font.Code
+                CheckBox.Parent = RowFrame
+                applyNeonStroke(CheckBox, attrValue and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 50, 80), 1)
+
+                CheckBox.MouseButton1Click:Connect(function()
+                    local currentVal = isValObj and valInst.Value or group.object:GetAttribute(attrName)
+                    local newVal = not currentVal
+                    if isValObj then
+                        pcall(function() valInst.Value = newVal end)
+                    else
+                        group.object:SetAttribute(attrName, newVal)
+                    end
+                    if lockedAttributes[fullAttrKey] ~= nil then
+                        lockedAttributes[fullAttrKey].value = newVal
+                    end
+                end)
+            end
 
             LockBtn.MouseButton1Click:Connect(function()
-                if lockedAttributes[attrName] ~= nil then
-                    lockedAttributes[attrName] = nil
+                if lockedAttributes[fullAttrKey] ~= nil then
+                    lockedAttributes[fullAttrKey] = nil
                     LockBtn.BackgroundColor3 = Color3.fromRGB(30, 18, 48)
                 else
-                    lockedAttributes[attrName] = targetObj:GetAttribute(attrName)
+                    lockedAttributes[fullAttrKey] = {
+                        object = isValObj and valInst or group.object,
+                        isValueObj = isValObj,
+                        attrName = attrName,
+                        value = isValObj and valInst.Value or group.object:GetAttribute(attrName)
+                    }
                     LockBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 128)
                 end
             end)
 
             LoadoutToggleAttrBtn.MouseButton1Click:Connect(function()
-                loadoutToggledAttributes[attrName] = not loadoutToggledAttributes[attrName]
-                LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
-                LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-            end)
-
-        elseif valueType == "boolean" then
-            local RowFrame = Instance.new("Frame")
-            RowFrame.Size = UDim2.new(1, -6, 0, 32)
-            RowFrame.BackgroundColor3 = Color3.fromRGB(22, 14, 36)
-            RowFrame.Parent = Tab2Scroll
-            applyNeonStroke(RowFrame, Color3.fromRGB(45, 25, 70), 1)
-
-            local NameLabel = Instance.new("TextLabel")
-            NameLabel.Size = UDim2.new(0.32, -2, 1, 0)
-            NameLabel.Position = UDim2.new(0, 4, 0, 0)
-            NameLabel.BackgroundTransparency = 1
-            NameLabel.Text = attrName
-            NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-            NameLabel.TextSize = 10
-            NameLabel.Font = Enum.Font.SourceSansBold
-            NameLabel.TextXAlignment = Enum.TextXAlignment.Left
-            NameLabel.Parent = RowFrame
-
-            local CheckBox = Instance.new("TextButton")
-            CheckBox.Size = UDim2.new(0.38, 0, 0, 20)
-            CheckBox.Position = UDim2.new(0.34, 0, 0, 6)
-            CheckBox.BackgroundColor3 = attrValue and Color3.fromRGB(0, 180, 120) or Color3.fromRGB(60, 20, 30)
-            CheckBox.Text = attrValue and "[ TRUE ]" or "[ FALSE ]"
-            CheckBox.TextColor3 = Color3.fromRGB(255, 255, 255)
-            CheckBox.TextSize = 9
-            CheckBox.Font = Enum.Font.Code
-            CheckBox.Parent = RowFrame
-            applyNeonStroke(CheckBox, attrValue and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 50, 80), 1)
-
-            local LockBtn = Instance.new("TextButton")
-            LockBtn.Size = UDim2.new(0.11, 0, 0, 20)
-            LockBtn.Position = UDim2.new(0.73, 0, 0, 6)
-            LockBtn.BackgroundColor3 = lockedAttributes[attrName] ~= nil and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(30, 18, 48)
-            LockBtn.Text = "§"
-            LockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            LockBtn.TextSize = 11
-            LockBtn.Font = Enum.Font.SourceSansBold
-            LockBtn.Parent = RowFrame
-            applyNeonStroke(LockBtn, Color3.fromRGB(255, 0, 128), 1)
-
-            local LoadoutToggleAttrBtn = Instance.new("TextButton")
-            LoadoutToggleAttrBtn.Size = UDim2.new(0.13, 0, 0, 20)
-            LoadoutToggleAttrBtn.Position = UDim2.new(0.85, 0, 0, 6)
-            LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
-            LoadoutToggleAttrBtn.Text = "{#}"
-            LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
-            LoadoutToggleAttrBtn.TextSize = 10
-            LoadoutToggleAttrBtn.Font = Enum.Font.SourceSansBold
-            LoadoutToggleAttrBtn.Parent = RowFrame
-            applyNeonStroke(LoadoutToggleAttrBtn, Color3.fromRGB(0, 240, 255), 1)
-
-            CheckBox.MouseButton1Click:Connect(function()
-                local newVal = not targetObj:GetAttribute(attrName)
-                targetObj:SetAttribute(attrName, newVal)
-                if lockedAttributes[attrName] ~= nil then lockedAttributes[attrName] = newVal end
-            end)
-
-            LockBtn.MouseButton1Click:Connect(function()
-                if lockedAttributes[attrName] ~= nil then
-                    lockedAttributes[attrName] = nil
-                    LockBtn.BackgroundColor3 = Color3.fromRGB(30, 18, 48)
-                else
-                    lockedAttributes[attrName] = targetObj:GetAttribute(attrName)
-                    LockBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 128)
-                end
-            end)
-
-            LoadoutToggleAttrBtn.MouseButton1Click:Connect(function()
-                loadoutToggledAttributes[attrName] = not loadoutToggledAttributes[attrName]
-                LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
-                LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+                loadoutToggledAttributes[fullAttrKey] = not loadoutToggledAttributes[fullAttrKey]
+                LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[fullAttrKey] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
+                LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[fullAttrKey] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
             end)
         end
     end
 
-    Tab1Scroll.CanvasSize = UDim2.new(0, 0, 0, Tab1Layout.AbsoluteContentSize.Y + 10)
-    Tab2Scroll.CanvasSize = UDim2.new(0, 0, 0, Tab2Layout.AbsoluteContentSize.Y + 10)
+    MainScroll.CanvasSize = UDim2.new(0, 0, 0, MainLayout.AbsoluteContentSize.Y + 10)
 end
 
 getgenv().VaporwaveRefreshAttributes = renderAttributes
 
 -- Continuous Lock Loop
 table.insert(connections, RunService.Heartbeat:Connect(function()
-    local targetObj = getTargetObject()
-    if targetObj then
-        for attrName, forcedValue in pairs(lockedAttributes) do
-            if targetObj:GetAttribute(attrName) ~= forcedValue then
-                targetObj:SetAttribute(attrName, forcedValue)
+    for fullKey, lockData in pairs(lockedAttributes) do
+        if lockData and lockData.object and lockData.object.Parent then
+            if lockData.isValueObj then
+                if lockData.object.Value ~= lockData.value then
+                    pcall(function() lockData.object.Value = lockData.value end)
+                end
+            else
+                if lockData.object:GetAttribute(lockData.attrName) ~= lockData.value then
+                    pcall(function() lockData.object:SetAttribute(lockData.attrName, lockData.value) end)
+                end
             end
         end
     end
