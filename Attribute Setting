@@ -8,6 +8,7 @@ local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
 
 local LocalPlayer = Players.LocalPlayer
 local connections = {}
@@ -15,25 +16,31 @@ local originalAttributes = {}
 local lockedAttributes = {}
 local loadoutToggledAttributes = {} -- Tracks attributes toggled with {#}
 local savedLoadouts = {} -- Stores named loadouts
-local autoLoadName = nil -- Stores the loadout marked for auto execution
 local selectedLoadoutName = nil
-local currentTab = 1
-local targetType = "Player" -- Options: "Player", "Character", "Tool"
+local autoLoadName = nil
+local currentTab = 1 -- 1 = Str/Num, 2 = Booleans
+local targetType = "Player" -- "Player", "Character", "Tools"
+local selectedToolName = nil
+local currentAttrConnection = nil
 
 local JSON_FILE_NAME = "AttributeLoadout.json"
+local AUTO_EXECUTE_URL = "https://raw.githubusercontent.com/Neokkin/Neokk10F/refs/heads/main/Attribute Setting"
 local pendingDeleteName = nil
 local pendingEditName = nil
 
--- Auto Execute on Teleport / Serverhop Setup
-local AUTO_EXEC_URL = "https://raw.githubusercontent.com/Neokkin/Neokk10F/refs/heads/main/Attribute%20Setting"
-local queue_on_teleport = queue_on_teleport or (syn and syn.queue_on_teleport) or (fluxus and fluxus.queue_on_teleport) or queue_for_teleport
-
-if queue_on_teleport then
-    pcall(function()
-        LocalPlayer.OnTeleport:Connect(function()
-            queue_on_teleport(string.format('loadstring(game:HttpGet("%s"))()', AUTO_EXEC_URL))
-        end)
-    end)
+-- Auto Execute on Teleport / Server Hop Setup
+local queueFunc = (syn and syn.queue_on_teleport) or queue_on_teleport or (fluxus and fluxus.queue_on_teleport) or (TeleportService and TeleportService.queue_on_teleport)
+if queueFunc then
+    local teleportScript = string.format([[
+        repeat task.wait() until game:IsLoaded()
+        loadstring(game:HttpGet("%s"))()
+    ]], AUTO_EXECUTE_URL)
+    
+    pcall(function() queueFunc(teleportScript) end)
+    
+    table.insert(connections, LocalPlayer.OnTeleport:Connect(function()
+        pcall(function() queueFunc(teleportScript) end)
+    end))
 end
 
 -- File I/O for JSON Persistence
@@ -59,7 +66,7 @@ local function loadFromFile()
                 savedLoadouts = result.loadouts or {}
                 autoLoadName = result.autoLoad
             else
-                savedLoadouts = result -- Backwards compatibility
+                savedLoadouts = result -- Backward compatibility
             end
         end
     end
@@ -67,20 +74,75 @@ end
 
 loadFromFile()
 
--- Target Resolver
+-- Target Object Resolution (Player, Character, Tools)
+local function getAllTools()
+    local toolNames = {}
+    local seen = {}
+
+    local char = LocalPlayer.Character
+    if char then
+        for _, item in ipairs(char:GetChildren()) do
+            if item:IsA("Tool") and not seen[item.Name] then
+                seen[item.Name] = true
+                table.insert(toolNames, item.Name)
+            end
+        end
+    end
+
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if backpack then
+        for _, item in ipairs(backpack:GetChildren()) do
+            if item:IsA("Tool") and not seen[item.Name] then
+                seen[item.Name] = true
+                table.insert(toolNames, item.Name)
+            end
+        end
+    end
+
+    table.sort(toolNames, function(a, b) return a:lower() < b:lower() end)
+    return toolNames
+end
+
+local function getTargetTool()
+    local toolNames = getAllTools()
+    if not selectedToolName or not table.find(toolNames, selectedToolName) then
+        selectedToolName = toolNames[1]
+    end
+    if not selectedToolName then return nil end
+
+    -- Check Character first then Backpack
+    local char = LocalPlayer.Character
+    if char then
+        local tool = char:FindFirstChild(selectedToolName)
+        if tool and tool:IsA("Tool") then return tool end
+    end
+
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if backpack then
+        local tool = backpack:FindFirstChild(selectedToolName)
+        if tool and tool:IsA("Tool") then return tool end
+    end
+
+    return nil
+end
+
 local function getTargetObject()
     if targetType == "Player" then
         return LocalPlayer
     elseif targetType == "Character" then
         return LocalPlayer.Character
-    elseif targetType == "Tool" then
-        local char = LocalPlayer.Character
-        return char and char:FindFirstChildOfClass("Tool")
+    elseif targetType == "Tools" then
+        return getTargetTool()
     end
     return nil
 end
 
--- Cache original attributes for LocalPlayer
+-- Shield / Touch State
+local isShieldOn = false
+local modes = {"Halfed", "Immunity"}
+local modeIndex = 1
+local currentMode = modes[modeIndex]
+
 for name, value in pairs(LocalPlayer:GetAttributes()) do
     originalAttributes[name] = value
 end
@@ -102,6 +164,9 @@ local function fullCleanup()
     end
     table.clear(connections)
     table.clear(lockedAttributes)
+    if currentAttrConnection and currentAttrConnection.Connected then
+        currentAttrConnection:Disconnect()
+    end
     
     local existingGui = targetParent:FindFirstChild(GUI_NAME)
     if existingGui then existingGui:Destroy() end
@@ -219,7 +284,7 @@ CloseBtn.Font = Enum.Font.SourceSansBold
 CloseBtn.Parent = Header
 applyNeonStroke(CloseBtn, Color3.fromRGB(255, 0, 128), 1)
 
--- Target Selection Tabs (Player, Character, Tool)
+-- Target Selection Bar (Player, Character, Tools)
 local TargetContainer = Instance.new("Frame")
 TargetContainer.Size = UDim2.new(1, -10, 0, 22)
 TargetContainer.Position = UDim2.new(0, 5, 0, 34)
@@ -227,42 +292,90 @@ TargetContainer.BackgroundTransparency = 1
 TargetContainer.Parent = MainFrame
 
 local TargetPlayerBtn = Instance.new("TextButton")
-TargetPlayerBtn.Size = UDim2.new(0.32, 0, 1, 0)
+TargetPlayerBtn.Size = UDim2.new(0.28, 0, 1, 0)
 TargetPlayerBtn.Position = UDim2.new(0, 0, 0, 0)
 TargetPlayerBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 55)
 TargetPlayerBtn.Text = "Player"
 TargetPlayerBtn.TextColor3 = Color3.fromRGB(0, 240, 255)
-TargetPlayerBtn.TextSize = 10
+TargetPlayerBtn.TextSize = 11
 TargetPlayerBtn.Font = Enum.Font.SourceSansBold
 TargetPlayerBtn.Parent = TargetContainer
 applyNeonStroke(TargetPlayerBtn, Color3.fromRGB(0, 240, 255), 1)
 
 local TargetCharBtn = Instance.new("TextButton")
-TargetCharBtn.Size = UDim2.new(0.32, 0, 1, 0)
-TargetCharBtn.Position = UDim2.new(0.34, 0, 0, 0)
+TargetCharBtn.Size = UDim2.new(0.30, 0, 1, 0)
+TargetCharBtn.Position = UDim2.new(0.29, 0, 0, 0)
 TargetCharBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35)
 TargetCharBtn.Text = "Character"
 TargetCharBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
-TargetCharBtn.TextSize = 10
+TargetCharBtn.TextSize = 11
 TargetCharBtn.Font = Enum.Font.SourceSansBold
 TargetCharBtn.Parent = TargetContainer
 applyNeonStroke(TargetCharBtn, Color3.fromRGB(80, 50, 100), 1)
 
-local TargetToolBtn = Instance.new("TextButton")
-TargetToolBtn.Size = UDim2.new(0.32, 0, 1, 0)
-TargetToolBtn.Position = UDim2.new(0.68, 0, 0, 0)
-TargetToolBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35)
-TargetToolBtn.Text = "Tool"
-TargetToolBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
-TargetToolBtn.TextSize = 10
-TargetToolBtn.Font = Enum.Font.SourceSansBold
-TargetToolBtn.Parent = TargetContainer
-applyNeonStroke(TargetToolBtn, Color3.fromRGB(80, 50, 100), 1)
+local TargetToolsBtn = Instance.new("TextButton")
+TargetToolsBtn.Size = UDim2.new(0.26, 0, 1, 0)
+TargetToolsBtn.Position = UDim2.new(0.60, 0, 0, 0)
+TargetToolsBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35)
+TargetToolsBtn.Text = "Tools"
+TargetToolsBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+TargetToolsBtn.TextSize = 11
+TargetToolsBtn.Font = Enum.Font.SourceSansBold
+TargetToolsBtn.Parent = TargetContainer
+applyNeonStroke(TargetToolsBtn, Color3.fromRGB(80, 50, 100), 1)
 
--- Tab Controls (Str & Num / Booleans)
+-- Tools Dropdown Toggle Button
+local ToolsDropdownBtn = Instance.new("TextButton")
+ToolsDropdownBtn.Size = UDim2.new(0.12, 0, 1, 0)
+ToolsDropdownBtn.Position = UDim2.new(0.88, 0, 0, 0)
+ToolsDropdownBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 55)
+ToolsDropdownBtn.Text = "▼"
+ToolsDropdownBtn.TextColor3 = Color3.fromRGB(255, 0, 128)
+ToolsDropdownBtn.TextSize = 10
+ToolsDropdownBtn.Font = Enum.Font.SourceSansBold
+ToolsDropdownBtn.Parent = TargetContainer
+applyNeonStroke(ToolsDropdownBtn, Color3.fromRGB(255, 0, 128), 1)
+
+-- Side Dropdown Menu for Tools Selection
+local ToolsDropdownFrame = Instance.new("Frame")
+ToolsDropdownFrame.Name = "ToolsDropdownFrame"
+ToolsDropdownFrame.Size = UDim2.new(0, 150, 0, 180)
+ToolsDropdownFrame.Position = UDim2.new(1, 10, 0, 34)
+ToolsDropdownFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 32)
+ToolsDropdownFrame.Visible = false
+ToolsDropdownFrame.Parent = MainFrame
+
+local ToolsDropdownCorner = Instance.new("UICorner")
+ToolsDropdownCorner.CornerRadius = UDim.new(0, 8)
+ToolsDropdownCorner.Parent = ToolsDropdownFrame
+applyNeonStroke(ToolsDropdownFrame, Color3.fromRGB(255, 0, 128), 1.5)
+
+local ToolsDropdownTitle = Instance.new("TextLabel")
+ToolsDropdownTitle.Size = UDim2.new(1, 0, 0, 22)
+ToolsDropdownTitle.BackgroundTransparency = 1
+ToolsDropdownTitle.Text = "SELECT TOOL"
+ToolsDropdownTitle.TextColor3 = Color3.fromRGB(0, 240, 255)
+ToolsDropdownTitle.TextSize = 10
+ToolsDropdownTitle.Font = Enum.Font.FredokaOne
+ToolsDropdownTitle.Parent = ToolsDropdownFrame
+
+local ToolsDropdownScroll = Instance.new("ScrollingFrame")
+ToolsDropdownScroll.Size = UDim2.new(1, -10, 1, -28)
+ToolsDropdownScroll.Position = UDim2.new(0, 5, 0, 24)
+ToolsDropdownScroll.BackgroundTransparency = 1
+ToolsDropdownScroll.ScrollBarThickness = 3
+ToolsDropdownScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 240, 255)
+ToolsDropdownScroll.Parent = ToolsDropdownFrame
+
+local ToolsDropdownLayout = Instance.new("UIListLayout")
+ToolsDropdownLayout.Padding = UDim.new(0, 3)
+ToolsDropdownLayout.SortOrder = Enum.SortOrder.LayoutOrder
+ToolsDropdownLayout.Parent = ToolsDropdownScroll
+
+-- Data Type Tab Controls (Str & Num / Booleans)
 local TabContainer = Instance.new("Frame")
 TabContainer.Size = UDim2.new(1, -10, 0, 22)
-TabContainer.Position = UDim2.new(0, 5, 0, 58)
+TabContainer.Position = UDim2.new(0, 5, 0, 60)
 TabContainer.BackgroundTransparency = 1
 TabContainer.Parent = MainFrame
 
@@ -290,8 +403,8 @@ applyNeonStroke(Tab2Btn, Color3.fromRGB(80, 50, 100), 1)
 
 -- Scrolling Lists
 local Tab1Scroll = Instance.new("ScrollingFrame")
-Tab1Scroll.Size = UDim2.new(1, -10, 1, -88)
-Tab1Scroll.Position = UDim2.new(0, 5, 0, 82)
+Tab1Scroll.Size = UDim2.new(1, -10, 1, -90)
+Tab1Scroll.Position = UDim2.new(0, 5, 0, 86)
 Tab1Scroll.BackgroundTransparency = 1
 Tab1Scroll.ScrollBarThickness = 4
 Tab1Scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 0, 128)
@@ -304,8 +417,8 @@ Tab1Layout.SortOrder = Enum.SortOrder.LayoutOrder
 Tab1Layout.Parent = Tab1Scroll
 
 local Tab2Scroll = Instance.new("ScrollingFrame")
-Tab2Scroll.Size = UDim2.new(1, -10, 1, -88)
-Tab2Scroll.Position = UDim2.new(0, 5, 0, 82)
+Tab2Scroll.Size = UDim2.new(1, -10, 1, -90)
+Tab2Scroll.Position = UDim2.new(0, 5, 0, 86)
 Tab2Scroll.BackgroundTransparency = 1
 Tab2Scroll.ScrollBarThickness = 4
 Tab2Scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 240, 255)
@@ -332,7 +445,7 @@ ResizeGrip.Parent = MainFrame
 --================================================================--
 local LoadoutFrame = Instance.new("Frame")
 LoadoutFrame.Name = "LoadoutPopUp"
-LoadoutFrame.Size = UDim2.new(0, 230, 0, 235)
+LoadoutFrame.Size = UDim2.new(0, 240, 0, 210)
 LoadoutFrame.Position = UDim2.new(1, 10, 0, 0)
 LoadoutFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 32)
 LoadoutFrame.Visible = false
@@ -343,7 +456,6 @@ LoadoutCorner.CornerRadius = UDim.new(0, 8)
 LoadoutCorner.Parent = LoadoutFrame
 applyNeonStroke(LoadoutFrame, Color3.fromRGB(255, 0, 128), 1.5)
 
--- Loadout Title Label
 local LoadoutTitle = Instance.new("TextLabel")
 LoadoutTitle.Size = UDim2.new(1, 0, 0, 24)
 LoadoutTitle.BackgroundTransparency = 1
@@ -353,9 +465,8 @@ LoadoutTitle.TextSize = 11
 LoadoutTitle.Font = Enum.Font.FredokaOne
 LoadoutTitle.Parent = LoadoutFrame
 
--- Scrollable Loadout List
 local LoadoutScroll = Instance.new("ScrollingFrame")
-LoadoutScroll.Size = UDim2.new(1, -12, 1, -110)
+LoadoutScroll.Size = UDim2.new(1, -12, 1, -85)
 LoadoutScroll.Position = UDim2.new(0, 6, 0, 26)
 LoadoutScroll.BackgroundTransparency = 1
 LoadoutScroll.ScrollBarThickness = 3
@@ -367,14 +478,12 @@ LoadoutListLayout.Padding = UDim.new(0, 3)
 LoadoutListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 LoadoutListLayout.Parent = LoadoutScroll
 
--- Bottom Controls Frame
 local BottomPanel = Instance.new("Frame")
-BottomPanel.Size = UDim2.new(1, -10, 0, 75)
-BottomPanel.Position = UDim2.new(0, 5, 1, -78)
+BottomPanel.Size = UDim2.new(1, -10, 0, 52)
+BottomPanel.Position = UDim2.new(0, 5, 1, -56)
 BottomPanel.BackgroundTransparency = 1
 BottomPanel.Parent = LoadoutFrame
 
--- Loadout Name Input Box
 local LoadoutNameInput = Instance.new("TextBox")
 LoadoutNameInput.Name = "LoadoutNameInput"
 LoadoutNameInput.Size = UDim2.new(1, 0, 0, 22)
@@ -390,9 +499,9 @@ LoadoutNameInput.ClearTextOnFocus = false
 LoadoutNameInput.Parent = BottomPanel
 applyNeonStroke(LoadoutNameInput, Color3.fromRGB(0, 240, 255), 1)
 
--- Action Buttons
+-- Save, Load, Auto, Edit, Delete Action Buttons
 local SaveBtn = Instance.new("TextButton")
-SaveBtn.Size = UDim2.new(0.31, 0, 0, 22)
+SaveBtn.Size = UDim2.new(0.18, 0, 0, 22)
 SaveBtn.Position = UDim2.new(0, 0, 0, 26)
 SaveBtn.BackgroundColor3 = Color3.fromRGB(25, 55, 35)
 SaveBtn.Text = "{Save}"
@@ -403,8 +512,8 @@ SaveBtn.Parent = BottomPanel
 applyNeonStroke(SaveBtn, Color3.fromRGB(0, 255, 150), 1)
 
 local LoadBtn = Instance.new("TextButton")
-LoadBtn.Size = UDim2.new(0.31, 0, 0, 22)
-LoadBtn.Position = UDim2.new(0.34, 0, 0, 26)
+LoadBtn.Size = UDim2.new(0.18, 0, 0, 22)
+LoadBtn.Position = UDim2.new(0.19, 0, 0, 26)
 LoadBtn.BackgroundColor3 = Color3.fromRGB(20, 45, 65)
 LoadBtn.Text = "{Load}"
 LoadBtn.TextColor3 = Color3.fromRGB(0, 200, 255)
@@ -414,19 +523,19 @@ LoadBtn.Parent = BottomPanel
 applyNeonStroke(LoadBtn, Color3.fromRGB(0, 200, 255), 1)
 
 local AutoLoadBtn = Instance.new("TextButton")
-AutoLoadBtn.Size = UDim2.new(0.33, 0, 0, 22)
-AutoLoadBtn.Position = UDim2.new(0.67, 0, 0, 26)
-AutoLoadBtn.BackgroundColor3 = Color3.fromRGB(20, 50, 40)
+AutoLoadBtn.Size = UDim2.new(0.22, 0, 0, 22)
+AutoLoadBtn.Position = UDim2.new(0.38, 0, 0, 26)
+AutoLoadBtn.BackgroundColor3 = Color3.fromRGB(15, 50, 30)
 AutoLoadBtn.Text = "{Auto}"
-AutoLoadBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
+AutoLoadBtn.TextColor3 = Color3.fromRGB(0, 255, 120)
 AutoLoadBtn.TextSize = 10
 AutoLoadBtn.Font = Enum.Font.SourceSansBold
 AutoLoadBtn.Parent = BottomPanel
-applyNeonStroke(AutoLoadBtn, Color3.fromRGB(0, 255, 128), 1)
+applyNeonStroke(AutoLoadBtn, Color3.fromRGB(0, 255, 120), 1)
 
 local EditBtn = Instance.new("TextButton")
-EditBtn.Size = UDim2.new(0.48, 0, 0, 22)
-EditBtn.Position = UDim2.new(0, 0, 0, 52)
+EditBtn.Size = UDim2.new(0.18, 0, 0, 22)
+EditBtn.Position = UDim2.new(0.61, 0, 0, 26)
 EditBtn.BackgroundColor3 = Color3.fromRGB(60, 25, 45)
 EditBtn.Text = "{Edit}"
 EditBtn.TextColor3 = Color3.fromRGB(255, 0, 128)
@@ -436,8 +545,8 @@ EditBtn.Parent = BottomPanel
 applyNeonStroke(EditBtn, Color3.fromRGB(255, 0, 128), 1)
 
 local DeleteBtn = Instance.new("TextButton")
-DeleteBtn.Size = UDim2.new(0.48, 0, 0, 22)
-DeleteBtn.Position = UDim2.new(0.52, 0, 0, 52)
+DeleteBtn.Size = UDim2.new(0.18, 0, 0, 22)
+DeleteBtn.Position = UDim2.new(0.80, 0, 0, 26)
 DeleteBtn.BackgroundColor3 = Color3.fromRGB(60, 15, 30)
 DeleteBtn.Text = "{Del}"
 DeleteBtn.TextColor3 = Color3.fromRGB(255, 50, 100)
@@ -455,45 +564,37 @@ local function resetConfirmations()
     EditBtn.BackgroundColor3 = Color3.fromRGB(60, 25, 45)
 end
 
--- Render Loadout List with Green Auto-Load Highlight
+-- Loadout List Rendering with Green Auto Load Highlight Indicator
 local function renderLoadoutList()
     for _, item in ipairs(LoadoutScroll:GetChildren()) do
         if item:IsA("TextButton") then item:Destroy() end
     end
 
     for name, _ in pairs(savedLoadouts) do
-        local isAuto = (autoLoadName == name)
-        local isSelected = (selectedLoadoutName == name)
-
+        local isAutoLoaded = (autoLoadName == name)
         local itemBtn = Instance.new("TextButton")
         itemBtn.Size = UDim2.new(1, -4, 0, 22)
         
-        if isAuto then
-            itemBtn.BackgroundColor3 = Color3.fromRGB(15, 45, 30)
-            itemBtn.Text = "  [AUTO] " .. name
-            itemBtn.TextColor3 = Color3.fromRGB(0, 255, 150)
-            applyNeonStroke(itemBtn, Color3.fromRGB(0, 255, 128), 1.5)
-        elseif isSelected then
-            itemBtn.BackgroundColor3 = Color3.fromRGB(50, 25, 70)
-            itemBtn.Text = "  " .. name
-            itemBtn.TextColor3 = Color3.fromRGB(255, 0, 128)
-            applyNeonStroke(itemBtn, Color3.fromRGB(255, 0, 128), 1)
+        if isAutoLoaded then
+            itemBtn.BackgroundColor3 = Color3.fromRGB(15, 45, 25)
+            itemBtn.TextColor3 = Color3.fromRGB(0, 255, 120)
+            itemBtn.Text = "  " .. name .. " [AUTO]"
         else
-            itemBtn.BackgroundColor3 = Color3.fromRGB(26, 16, 40)
+            itemBtn.BackgroundColor3 = (selectedLoadoutName == name) and Color3.fromRGB(50, 25, 70) or Color3.fromRGB(26, 16, 40)
+            itemBtn.TextColor3 = (selectedLoadoutName == name) and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(200, 200, 220)
             itemBtn.Text = "  " .. name
-            itemBtn.TextColor3 = Color3.fromRGB(200, 200, 220)
-            applyNeonStroke(itemBtn, Color3.fromRGB(45, 25, 65), 1)
         end
-
+        
         itemBtn.TextSize = 10
         itemBtn.Font = Enum.Font.SourceSansBold
         itemBtn.TextXAlignment = Enum.TextXAlignment.Left
         itemBtn.Parent = LoadoutScroll
+        
+        local strokeColor = isAutoLoaded and Color3.fromRGB(0, 255, 120) or ((selectedLoadoutName == name) and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(45, 25, 65))
+        applyNeonStroke(itemBtn, strokeColor, 1)
 
         itemBtn.MouseButton1Click:Connect(function()
-            if selectedLoadoutName ~= name then
-                resetConfirmations()
-            end
+            if selectedLoadoutName ~= name then resetConfirmations() end
             selectedLoadoutName = name
             renderLoadoutList()
         end)
@@ -502,50 +603,77 @@ local function renderLoadoutList()
     LoadoutScroll.CanvasSize = UDim2.new(0, 0, 0, LoadoutListLayout.AbsoluteContentSize.Y + 5)
 end
 
--- Apply Loadout
-local function applyLoadout(name)
-    local data = savedLoadouts[name]
-    if not data then return end
-
-    local target = getTargetObject()
-    if not target then return end
-
-    table.clear(lockedAttributes)
-
-    for k, v in pairs(data.attributes) do
-        target:SetAttribute(k, v)
+-- Render Tools Dropdown Menu
+local function renderToolsDropdown()
+    for _, child in ipairs(ToolsDropdownScroll:GetChildren()) do
+        if child:IsA("TextButton") then child:Destroy() end
     end
 
-    for k, v in pairs(data.locks or {}) do
-        lockedAttributes[k] = v
+    local toolNames = getAllTools()
+    if #toolNames == 0 then
+        local emptyLabel = Instance.new("TextLabel")
+        emptyLabel.Size = UDim2.new(1, 0, 0, 20)
+        emptyLabel.BackgroundTransparency = 1
+        emptyLabel.Text = "No tools found"
+        emptyLabel.TextColor3 = Color3.fromRGB(150, 150, 150)
+        emptyLabel.TextSize = 10
+        emptyLabel.Font = Enum.Font.SourceSans
+        emptyLabel.Parent = ToolsDropdownScroll
+    else
+        for _, tName in ipairs(toolNames) do
+            local isSelected = (selectedToolName == tName)
+            local itemBtn = Instance.new("TextButton")
+            itemBtn.Size = UDim2.new(1, -4, 0, 20)
+            itemBtn.BackgroundColor3 = isSelected and Color3.fromRGB(50, 25, 70) or Color3.fromRGB(26, 16, 40)
+            itemBtn.Text = " " .. tName
+            itemBtn.TextColor3 = isSelected and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(200, 200, 220)
+            itemBtn.TextSize = 10
+            itemBtn.Font = Enum.Font.SourceSansBold
+            itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+            itemBtn.Parent = ToolsDropdownScroll
+            applyNeonStroke(itemBtn, isSelected and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(45, 25, 65), 1)
+
+            itemBtn.MouseButton1Click:Connect(function()
+                selectedToolName = tName
+                targetType = "Tools"
+                TargetPlayerBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); TargetPlayerBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+                TargetCharBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); TargetCharBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+                TargetToolsBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); TargetToolsBtn.TextColor3 = Color3.fromRGB(0, 240, 255)
+                applyNeonStroke(TargetPlayerBtn, Color3.fromRGB(80, 50, 100), 1)
+                applyNeonStroke(TargetCharBtn, Color3.fromRGB(80, 50, 100), 1)
+                applyNeonStroke(TargetToolsBtn, Color3.fromRGB(0, 240, 255), 1)
+                
+                ToolsDropdownFrame.Visible = false
+                renderToolsDropdown()
+                if getgenv().VaporwaveRefreshAttributes then getgenv().VaporwaveRefreshAttributes() end
+            end)
+        end
     end
 
-    if getgenv().VaporwaveRefreshAttributes then
-        getgenv().VaporwaveRefreshAttributes()
-    end
+    ToolsDropdownScroll.CanvasSize = UDim2.new(0, 0, 0, ToolsDropdownLayout.AbsoluteContentSize.Y + 5)
 end
 
--- Save Handler
+--================================================================--
+--                    LOADOUT BUTTON LOGIC                        --
+--================================================================--
+
 SaveBtn.MouseButton1Click:Connect(function()
     resetConfirmations()
-    local target = getTargetObject()
-    if not target then return end
-
     local name = LoadoutNameInput.Text:match("^%s*(.-)%s*$")
     if name == "" then return end
 
+    local targetObj = getTargetObject()
+    if not targetObj then return end
+
     local hasToggledAttributes = false
     for _, isToggled in pairs(loadoutToggledAttributes) do
-        if isToggled then
-            hasToggledAttributes = true
-            break
-        end
+        if isToggled then hasToggledAttributes = true; break end
     end
 
     local attrSnapshot = {}
     local lockSnapshot = {}
 
-    for k, v in pairs(target:GetAttributes()) do
+    for k, v in pairs(targetObj:GetAttributes()) do
         if not hasToggledAttributes or loadoutToggledAttributes[k] then
             attrSnapshot[k] = v
             if lockedAttributes[k] ~= nil then
@@ -556,7 +684,9 @@ SaveBtn.MouseButton1Click:Connect(function()
 
     savedLoadouts[name] = {
         attributes = attrSnapshot,
-        locks = lockSnapshot
+        locks = lockSnapshot,
+        shield = isShieldOn,
+        mode = currentMode
     }
 
     selectedLoadoutName = name
@@ -564,7 +694,31 @@ SaveBtn.MouseButton1Click:Connect(function()
     renderLoadoutList()
 end)
 
--- Load Handler
+local function applyLoadout(name)
+    local data = savedLoadouts[name]
+    if not data then return end
+
+    local targetObj = getTargetObject()
+    if not targetObj then return end
+
+    table.clear(lockedAttributes)
+
+    for k, v in pairs(data.attributes) do
+        targetObj:SetAttribute(k, v)
+    end
+
+    for k, v in pairs(data.locks) do
+        lockedAttributes[k] = v
+    end
+
+    isShieldOn = data.shield
+    currentMode = data.mode
+
+    if getgenv().VaporwaveRefreshAttributes then
+        getgenv().VaporwaveRefreshAttributes()
+    end
+end
+
 LoadBtn.MouseButton1Click:Connect(function()
     resetConfirmations()
     if selectedLoadoutName then
@@ -572,21 +726,21 @@ LoadBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Auto-Load Toggle Handler
+-- Auto Load Button Toggle
 AutoLoadBtn.MouseButton1Click:Connect(function()
     resetConfirmations()
-    if selectedLoadoutName and savedLoadouts[selectedLoadoutName] then
-        if autoLoadName == selectedLoadoutName then
-            autoLoadName = nil
-        else
-            autoLoadName = selectedLoadoutName
-        end
-        saveToFile()
-        renderLoadoutList()
+    if not selectedLoadoutName then return end
+
+    if autoLoadName == selectedLoadoutName then
+        autoLoadName = nil
+    else
+        autoLoadName = selectedLoadoutName
     end
+
+    saveToFile()
+    renderLoadoutList()
 end)
 
--- Edit Handler
 EditBtn.MouseButton1Click:Connect(function()
     if not selectedLoadoutName or not savedLoadouts[selectedLoadoutName] then return end
 
@@ -603,7 +757,6 @@ EditBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Delete Handler
 DeleteBtn.MouseButton1Click:Connect(function()
     if not selectedLoadoutName or not savedLoadouts[selectedLoadoutName] then return end
 
@@ -613,13 +766,9 @@ DeleteBtn.MouseButton1Click:Connect(function()
         DeleteBtn.Text = "[SURE?]"
         DeleteBtn.BackgroundColor3 = Color3.fromRGB(220, 20, 60)
     else
-        if autoLoadName == selectedLoadoutName then
-            autoLoadName = nil
-        end
         savedLoadouts[selectedLoadoutName] = nil
-        if LoadoutNameInput.Text == selectedLoadoutName then
-            LoadoutNameInput.Text = ""
-        end
+        if autoLoadName == selectedLoadoutName then autoLoadName = nil end
+        if LoadoutNameInput.Text == selectedLoadoutName then LoadoutNameInput.Text = "" end
         selectedLoadoutName = nil
         saveToFile()
         resetConfirmations()
@@ -627,17 +776,58 @@ DeleteBtn.MouseButton1Click:Connect(function()
     end
 end)
 
--- Loadout Toggle
 LoadoutToggleBtn.MouseButton1Click:Connect(function()
     LoadoutFrame.Visible = not LoadoutFrame.Visible
 end)
 
--- Core Visibility Toggle
 table.insert(connections, ToggleBtn.MouseButton1Click:Connect(function()
     MainFrame.Visible = not MainFrame.Visible
 end))
 
--- Double Click Helper
+-- Target Switch Handlers
+TargetPlayerBtn.MouseButton1Click:Connect(function()
+    targetType = "Player"
+    TargetPlayerBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); TargetPlayerBtn.TextColor3 = Color3.fromRGB(0, 240, 255)
+    TargetCharBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); TargetCharBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+    TargetToolsBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); TargetToolsBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+    applyNeonStroke(TargetPlayerBtn, Color3.fromRGB(0, 240, 255), 1)
+    applyNeonStroke(TargetCharBtn, Color3.fromRGB(80, 50, 100), 1)
+    applyNeonStroke(TargetToolsBtn, Color3.fromRGB(80, 50, 100), 1)
+    ToolsDropdownFrame.Visible = false
+    if getgenv().VaporwaveRefreshAttributes then getgenv().VaporwaveRefreshAttributes() end
+end)
+
+TargetCharBtn.MouseButton1Click:Connect(function()
+    targetType = "Character"
+    TargetCharBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); TargetCharBtn.TextColor3 = Color3.fromRGB(0, 240, 255)
+    TargetPlayerBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); TargetPlayerBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+    TargetToolsBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); TargetToolsBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+    applyNeonStroke(TargetCharBtn, Color3.fromRGB(0, 240, 255), 1)
+    applyNeonStroke(TargetPlayerBtn, Color3.fromRGB(80, 50, 100), 1)
+    applyNeonStroke(TargetToolsBtn, Color3.fromRGB(80, 50, 100), 1)
+    ToolsDropdownFrame.Visible = false
+    if getgenv().VaporwaveRefreshAttributes then getgenv().VaporwaveRefreshAttributes() end
+end)
+
+TargetToolsBtn.MouseButton1Click:Connect(function()
+    targetType = "Tools"
+    TargetToolsBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); TargetToolsBtn.TextColor3 = Color3.fromRGB(0, 240, 255)
+    TargetPlayerBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); TargetPlayerBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+    TargetCharBtn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); TargetCharBtn.TextColor3 = Color3.fromRGB(150, 150, 180)
+    applyNeonStroke(TargetToolsBtn, Color3.fromRGB(0, 240, 255), 1)
+    applyNeonStroke(TargetPlayerBtn, Color3.fromRGB(80, 50, 100), 1)
+    applyNeonStroke(TargetCharBtn, Color3.fromRGB(80, 50, 100), 1)
+    if getgenv().VaporwaveRefreshAttributes then getgenv().VaporwaveRefreshAttributes() end
+end)
+
+ToolsDropdownBtn.MouseButton1Click:Connect(function()
+    ToolsDropdownFrame.Visible = not ToolsDropdownFrame.Visible
+    if ToolsDropdownFrame.Visible then
+        renderToolsDropdown()
+    end
+end)
+
+-- Double Click Actions
 local function attachDoubleClick(button, callback)
     local lastClick = 0
     local conn = button.MouseButton1Click:Connect(function()
@@ -650,10 +840,10 @@ end
 attachDoubleClick(CloseBtn, function() fullCleanup() end)
 attachDoubleClick(RevertBtn, function()
     table.clear(lockedAttributes)
-    local target = getTargetObject()
-    if target == LocalPlayer then
+    local targetObj = getTargetObject()
+    if targetObj then
         for name, originalVal in pairs(originalAttributes) do
-            LocalPlayer:SetAttribute(name, originalVal)
+            targetObj:SetAttribute(name, originalVal)
         end
     end
     if getgenv().VaporwaveRefreshAttributes then
@@ -661,33 +851,80 @@ attachDoubleClick(RevertBtn, function()
     end
 end)
 
--- Target Selector Logic
-local targetAttrConnection = nil
+-- Tabs Switch
+Tab1Btn.MouseButton1Click:Connect(function()
+    currentTab = 1
+    Tab1Scroll.Visible = true; Tab2Scroll.Visible = false
+    Tab1Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); Tab1Btn.TextColor3 = Color3.fromRGB(0, 240, 255)
+    Tab2Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); Tab2Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
+end)
 
-local function updateTargetTabsUI()
-    local activeColor = Color3.fromRGB(0, 240, 255)
-    local inactiveColor = Color3.fromRGB(150, 150, 180)
-    local activeBg = Color3.fromRGB(35, 20, 55)
-    local inactiveBg = Color3.fromRGB(20, 12, 35)
+Tab2Btn.MouseButton1Click:Connect(function()
+    currentTab = 2
+    Tab1Scroll.Visible = false; Tab2Scroll.Visible = true
+    Tab2Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); Tab2Btn.TextColor3 = Color3.fromRGB(255, 0, 128)
+    Tab1Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); Tab1Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
+end)
 
-    TargetPlayerBtn.TextColor3 = (targetType == "Player") and activeColor or inactiveColor
-    TargetPlayerBtn.BackgroundColor3 = (targetType == "Player") and activeBg or inactiveBg
+-- Dragging & Resizing Logic
+local isDragging, isResizing = false, false
+local dragStart, resizeStart = Vector3.new(), Vector3.new()
+local startPos, startSize = UDim2.new(), UDim2.new()
 
-    TargetCharBtn.TextColor3 = (targetType == "Character") and activeColor or inactiveColor
-    TargetCharBtn.BackgroundColor3 = (targetType == "Character") and activeBg or inactiveBg
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = true; dragStart = input.Position; startPos = MainFrame.Position
+    end
+end)
 
-    TargetToolBtn.TextColor3 = (targetType == "Tool") and activeColor or inactiveColor
-    TargetToolBtn.BackgroundColor3 = (targetType == "Tool") and activeBg or inactiveBg
-end
+ResizeGrip.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isResizing = true; resizeStart = input.Position; startSize = MainFrame.Size
+    end
+end)
 
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = false; isResizing = false
+    end
+end)
+
+table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+        if isDragging then
+            local delta = input.Position - dragStart
+            local newX = math.clamp(startPos.X.Offset + delta.X, 0, viewport.X - MainFrame.AbsoluteSize.X)
+            local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, viewport.Y - MainFrame.AbsoluteSize.Y)
+            MainFrame.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
+        elseif isResizing then
+            local delta = input.Position - resizeStart
+            local newWidth = math.clamp(startSize.X.Offset + delta.X, 260, viewport.X - MainFrame.AbsolutePosition.X)
+            local newHeight = math.clamp(startSize.Y.Offset + delta.Y, 200, viewport.Y - MainFrame.AbsolutePosition.Y)
+            MainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
+        end
+    end
+end))
+
+-- Attribute Rendering Logic
 local function renderAttributes()
     for _, child in ipairs(Tab1Scroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
     for _, child in ipairs(Tab2Scroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
 
-    local target = getTargetObject()
-    if not target then return end
+    local targetObj = getTargetObject()
 
-    local attributes = target:GetAttributes()
+    if currentAttrConnection and currentAttrConnection.Connected then
+        currentAttrConnection:Disconnect()
+        currentAttrConnection = nil
+    end
+
+    if not targetObj then return end
+
+    currentAttrConnection = targetObj.AttributeChanged:Connect(function()
+        renderAttributes()
+    end)
+
+    local attributes = targetObj:GetAttributes()
     local attrKeys = {}
     for key in pairs(attributes) do table.insert(attrKeys, key) end
     table.sort(attrKeys, function(a, b) return a:lower() < b:lower() end)
@@ -751,7 +988,7 @@ local function renderAttributes()
             InputBox.FocusLost:Connect(function(enter)
                 if enter then
                     local val = (valueType == "number") and (tonumber(InputBox.Text) or attrValue) or InputBox.Text
-                    target:SetAttribute(attrName, val)
+                    targetObj:SetAttribute(attrName, val)
                     if lockedAttributes[attrName] ~= nil then lockedAttributes[attrName] = val end
                 end
             end)
@@ -761,7 +998,7 @@ local function renderAttributes()
                     lockedAttributes[attrName] = nil
                     LockBtn.BackgroundColor3 = Color3.fromRGB(30, 18, 48)
                 else
-                    lockedAttributes[attrName] = target:GetAttribute(attrName)
+                    lockedAttributes[attrName] = targetObj:GetAttribute(attrName)
                     LockBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 128)
                 end
             end)
@@ -824,8 +1061,8 @@ local function renderAttributes()
             applyNeonStroke(LoadoutToggleAttrBtn, Color3.fromRGB(0, 240, 255), 1)
 
             CheckBox.MouseButton1Click:Connect(function()
-                local newVal = not target:GetAttribute(attrName)
-                target:SetAttribute(attrName, newVal)
+                local newVal = not targetObj:GetAttribute(attrName)
+                targetObj:SetAttribute(attrName, newVal)
                 if lockedAttributes[attrName] ~= nil then lockedAttributes[attrName] = newVal end
             end)
 
@@ -834,7 +1071,7 @@ local function renderAttributes()
                     lockedAttributes[attrName] = nil
                     LockBtn.BackgroundColor3 = Color3.fromRGB(30, 18, 48)
                 else
-                    lockedAttributes[attrName] = target:GetAttribute(attrName)
+                    lockedAttributes[attrName] = targetObj:GetAttribute(attrName)
                     LockBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 128)
                 end
             end)
@@ -853,129 +1090,55 @@ end
 
 getgenv().VaporwaveRefreshAttributes = renderAttributes
 
-local function setupTargetAttributeListener()
-    if targetAttrConnection then
-        targetAttrConnection:Disconnect()
-        targetAttrConnection = nil
-    end
-    local target = getTargetObject()
-    if target then
-        targetAttrConnection = target.AttributeChanged:Connect(function()
-            renderAttributes()
-        end)
-    end
-end
-
-local function setTarget(newTargetType)
-    targetType = newTargetType
-    updateTargetTabsUI()
-    setupTargetAttributeListener()
-    renderAttributes()
-end
-
-TargetPlayerBtn.MouseButton1Click:Connect(function() setTarget("Player") end)
-TargetCharBtn.MouseButton1Click:Connect(function() setTarget("Character") end)
-TargetToolBtn.MouseButton1Click:Connect(function() setTarget("Tool") end)
-
--- Type Switcher Tabs
-Tab1Btn.MouseButton1Click:Connect(function()
-    currentTab = 1
-    Tab1Scroll.Visible = true; Tab2Scroll.Visible = false
-    Tab1Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); Tab1Btn.TextColor3 = Color3.fromRGB(0, 240, 255)
-    Tab2Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); Tab2Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
-end)
-
-Tab2Btn.MouseButton1Click:Connect(function()
-    currentTab = 2
-    Tab1Scroll.Visible = false; Tab2Scroll.Visible = true
-    Tab2Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); Tab2Btn.TextColor3 = Color3.fromRGB(255, 0, 128)
-    Tab1Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); Tab1Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
-end)
-
--- Character & Tool Events Listener
-local function bindCharacterEvents(char)
-    if not char then return end
-    setupTargetAttributeListener()
-    renderAttributes()
-
-    table.insert(connections, char.ChildAdded:Connect(function(child)
-        if child:IsA("Tool") and targetType == "Tool" then
-            setupTargetAttributeListener()
-            renderAttributes()
-        end
-    end))
-
-    table.insert(connections, char.ChildRemoved:Connect(function(child)
-        if child:IsA("Tool") and targetType == "Tool" then
-            setupTargetAttributeListener()
-            renderAttributes()
-        end
-    end))
-end
-
-if LocalPlayer.Character then bindCharacterEvents(LocalPlayer.Character) end
-table.insert(connections, LocalPlayer.CharacterAdded:Connect(bindCharacterEvents))
-
--- Dragging & Resizing Logic
-local isDragging, isResizing = false, false
-local dragStart, resizeStart = Vector3.new(), Vector3.new()
-local startPos, startSize = UDim2.new(), UDim2.new()
-
-Header.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isDragging = true; dragStart = input.Position; startPos = MainFrame.Position
-    end
-end)
-
-ResizeGrip.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isResizing = true; resizeStart = input.Position; startSize = MainFrame.Size
-    end
-end)
-
-UserInputService.InputEnded:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-        isDragging = false; isResizing = false
-    end
-end)
-
-table.insert(connections, UserInputService.InputChanged:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-        local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
-        if isDragging then
-            local delta = input.Position - dragStart
-            local newX = math.clamp(startPos.X.Offset + delta.X, 0, viewport.X - MainFrame.AbsoluteSize.X)
-            local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, viewport.Y - MainFrame.AbsoluteSize.Y)
-            MainFrame.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
-        elseif isResizing then
-            local delta = input.Position - resizeStart
-            local newWidth = math.clamp(startSize.X.Offset + delta.X, 260, viewport.X - MainFrame.AbsolutePosition.X)
-            local newHeight = math.clamp(startSize.Y.Offset + delta.Y, 200, viewport.Y - MainFrame.AbsolutePosition.Y)
-            MainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
-        end
-    end
-end))
-
 -- Continuous Lock Loop
 table.insert(connections, RunService.Heartbeat:Connect(function()
-    local target = getTargetObject()
-    if target then
+    local targetObj = getTargetObject()
+    if targetObj then
         for attrName, forcedValue in pairs(lockedAttributes) do
-            if target:GetAttribute(attrName) ~= forcedValue then
-                target:SetAttribute(attrName, forcedValue)
+            if targetObj:GetAttribute(attrName) ~= forcedValue then
+                targetObj:SetAttribute(attrName, forcedValue)
             end
         end
     end
 end))
 
--- Auto Execution on Loadout Check
+-- Inventory & Character Listeners
+local function setupInventoryListeners()
+    local char = LocalPlayer.Character
+    if char then
+        table.insert(connections, char.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") and targetType == "Tools" then renderAttributes() end
+        end))
+        table.insert(connections, char.ChildRemoved:Connect(function(child)
+            if child:IsA("Tool") and targetType == "Tools" then renderAttributes() end
+        end))
+    end
+
+    local backpack = LocalPlayer:FindFirstChildOfClass("Backpack")
+    if backpack then
+        table.insert(connections, backpack.ChildAdded:Connect(function(child)
+            if child:IsA("Tool") and targetType == "Tools" then renderAttributes() end
+        end))
+        table.insert(connections, backpack.ChildRemoved:Connect(function(child)
+            if child:IsA("Tool") and targetType == "Tools" then renderAttributes() end
+        end))
+    end
+end
+
+table.insert(connections, LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    setupInventoryListeners()
+    renderAttributes()
+end))
+
+setupInventoryListeners()
+renderAttributes()
+renderLoadoutList()
+
+-- Execute Auto Load if configured
 if autoLoadName and savedLoadouts[autoLoadName] then
     task.spawn(function()
         task.wait(0.5)
         applyLoadout(autoLoadName)
     end)
 end
-
-setupTargetAttributeListener()
-renderAttributes()
-renderLoadoutList()
