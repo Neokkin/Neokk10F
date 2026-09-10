@@ -1,0 +1,787 @@
+--================================================================--
+--            VAPORWAVE ATTRIBUTE EDITOR + LOADOUTS               --
+--================================================================--
+
+-- Services & Setup
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local connections = {}
+local originalAttributes = {}
+local lockedAttributes = {}
+local loadoutToggledAttributes = {} -- Tracks attributes toggled with {#}
+local savedLoadouts = {} -- Stores named loadouts
+local selectedLoadoutName = nil
+local currentTab = 1
+
+local JSON_FILE_NAME = "AttributeLoadout.json"
+local pendingDeleteName = nil
+local pendingEditName = nil
+
+-- File I/O for JSON Persistence
+local function saveToFile()
+    if writefile then
+        pcall(function()
+            writefile(JSON_FILE_NAME, HttpService:JSONEncode(savedLoadouts))
+        end)
+    end
+end
+
+local function loadFromFile()
+    if isfile and readfile and isfile(JSON_FILE_NAME) then
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(readfile(JSON_FILE_NAME))
+        end)
+        if success and type(result) == "table" then
+            savedLoadouts = result
+        end
+    end
+end
+
+loadFromFile()
+
+-- Shield / Touch State
+local isShieldOn = false
+local modes = {"Halfed", "Immunity"}
+local modeIndex = 1
+local currentMode = modes[modeIndex]
+
+for name, value in pairs(LocalPlayer:GetAttributes()) do
+    originalAttributes[name] = value
+end
+
+local GUI_NAME = "VaporwaveAttributeEditor_Core"
+
+if getgenv().VaporwaveAttrGuiCleanup then
+    getgenv().VaporwaveAttrGuiCleanup()
+end
+
+local targetParent = LocalPlayer:FindFirstChild("PlayerGui")
+if pcall(function() local _ = CoreGui.Name end) then
+    targetParent = CoreGui
+end
+
+local function fullCleanup()
+    for _, conn in ipairs(connections) do
+        if conn and conn.Connected then conn:Disconnect() end
+    end
+    table.clear(connections)
+    table.clear(lockedAttributes)
+    
+    local existingGui = targetParent:FindFirstChild(GUI_NAME)
+    if existingGui then existingGui:Destroy() end
+    getgenv().VaporwaveAttrGuiCleanup = nil
+end
+
+getgenv().VaporwaveAttrGuiCleanup = fullCleanup
+
+-- UI Elements
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = GUI_NAME
+ScreenGui.ResetOnSpawn = false
+ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+ScreenGui.Parent = targetParent
+
+local function applyNeonStroke(instance, color, thickness)
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = color or Color3.fromRGB(0, 240, 255)
+    stroke.Thickness = thickness or 1.5
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Parent = instance
+    return stroke
+end
+
+-- Immovable Toggle Button
+local ToggleBtn = Instance.new("TextButton")
+ToggleBtn.Name = "ImmovableToggleBtn"
+ToggleBtn.Size = UDim2.new(0, 38, 0, 38)
+ToggleBtn.Position = UDim2.new(0, 15, 0, 52)
+ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 10, 32)
+ToggleBtn.Text = "∆"
+ToggleBtn.TextColor3 = Color3.fromRGB(255, 0, 128)
+ToggleBtn.TextSize = 20
+ToggleBtn.Font = Enum.Font.FredokaOne
+ToggleBtn.Parent = ScreenGui
+
+local ToggleCorner = Instance.new("UICorner")
+ToggleCorner.CornerRadius = UDim.new(1, 0)
+ToggleCorner.Parent = ToggleBtn
+applyNeonStroke(ToggleBtn, Color3.fromRGB(255, 0, 128), 2)
+
+-- Main Frame
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 340, 0, 280)
+MainFrame.Position = UDim2.new(0.5, -170, 0.4, -140)
+MainFrame.BackgroundColor3 = Color3.fromRGB(16, 10, 26)
+MainFrame.ClipsDescendants = false
+MainFrame.Visible = false
+MainFrame.Parent = ScreenGui
+
+local MainCorner = Instance.new("UICorner")
+MainCorner.CornerRadius = UDim.new(0, 8)
+MainCorner.Parent = MainFrame
+applyNeonStroke(MainFrame, Color3.fromRGB(0, 240, 255), 2)
+
+-- Header Bar
+local Header = Instance.new("Frame")
+Header.Name = "Header"
+Header.Size = UDim2.new(1, 0, 0, 30)
+Header.BackgroundColor3 = Color3.fromRGB(28, 16, 46)
+Header.Parent = MainFrame
+
+local HeaderCorner = Instance.new("UICorner")
+HeaderCorner.CornerRadius = UDim.new(0, 8)
+HeaderCorner.Parent = Header
+
+-- Revert Button
+local RevertBtn = Instance.new("TextButton")
+RevertBtn.Name = "RevertBtn"
+RevertBtn.Size = UDim2.new(0, 30, 0, 22)
+RevertBtn.Position = UDim2.new(0, 5, 0, 4)
+RevertBtn.BackgroundColor3 = Color3.fromRGB(45, 20, 60)
+RevertBtn.Text = "<<"
+RevertBtn.TextColor3 = Color3.fromRGB(0, 240, 255)
+RevertBtn.TextSize = 12
+RevertBtn.Font = Enum.Font.SourceSansBold
+RevertBtn.Parent = Header
+applyNeonStroke(RevertBtn, Color3.fromRGB(0, 240, 255), 1)
+
+-- Loadout Popup Toggle Button
+local LoadoutToggleBtn = Instance.new("TextButton")
+LoadoutToggleBtn.Name = "LoadoutToggleBtn"
+LoadoutToggleBtn.Size = UDim2.new(0, 60, 0, 22)
+LoadoutToggleBtn.Position = UDim2.new(0, 40, 0, 4)
+LoadoutToggleBtn.BackgroundColor3 = Color3.fromRGB(35, 20, 55)
+LoadoutToggleBtn.Text = "Loadout"
+LoadoutToggleBtn.TextColor3 = Color3.fromRGB(255, 0, 128)
+LoadoutToggleBtn.TextSize = 11
+LoadoutToggleBtn.Font = Enum.Font.SourceSansBold
+LoadoutToggleBtn.Parent = Header
+applyNeonStroke(LoadoutToggleBtn, Color3.fromRGB(255, 0, 128), 1)
+
+-- Title
+local TitleLabel = Instance.new("TextLabel")
+TitleLabel.Size = UDim2.new(1, -140, 1, 0)
+TitleLabel.Position = UDim2.new(0, 105, 0, 0)
+TitleLabel.BackgroundTransparency = 1
+TitleLabel.Text = "ATTRIBUTES"
+TitleLabel.TextColor3 = Color3.fromRGB(255, 0, 128)
+TitleLabel.TextSize = 13
+TitleLabel.Font = Enum.Font.FredokaOne
+TitleLabel.Parent = Header
+
+-- Close Button
+local CloseBtn = Instance.new("TextButton")
+CloseBtn.Name = "CloseBtn"
+CloseBtn.Size = UDim2.new(0, 26, 0, 22)
+CloseBtn.Position = UDim2.new(1, -31, 0, 4)
+CloseBtn.BackgroundColor3 = Color3.fromRGB(60, 15, 30)
+CloseBtn.Text = "X"
+CloseBtn.TextColor3 = Color3.fromRGB(255, 50, 100)
+CloseBtn.TextSize = 13
+CloseBtn.Font = Enum.Font.SourceSansBold
+CloseBtn.Parent = Header
+applyNeonStroke(CloseBtn, Color3.fromRGB(255, 0, 128), 1)
+
+-- Tab Controls
+local TabContainer = Instance.new("Frame")
+TabContainer.Size = UDim2.new(1, -10, 0, 24)
+TabContainer.Position = UDim2.new(0, 5, 0, 34)
+TabContainer.BackgroundTransparency = 1
+TabContainer.Parent = MainFrame
+
+local Tab1Btn = Instance.new("TextButton")
+Tab1Btn.Size = UDim2.new(0.49, 0, 1, 0)
+Tab1Btn.Position = UDim2.new(0, 0, 0, 0)
+Tab1Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55)
+Tab1Btn.Text = "Str & Num"
+Tab1Btn.TextColor3 = Color3.fromRGB(0, 240, 255)
+Tab1Btn.TextSize = 11
+Tab1Btn.Font = Enum.Font.SourceSansBold
+Tab1Btn.Parent = TabContainer
+applyNeonStroke(Tab1Btn, Color3.fromRGB(0, 240, 255), 1)
+
+local Tab2Btn = Instance.new("TextButton")
+Tab2Btn.Size = UDim2.new(0.49, 0, 1, 0)
+Tab2Btn.Position = UDim2.new(0.51, 0, 0, 0)
+Tab2Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35)
+Tab2Btn.Text = "Booleans"
+Tab2Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
+Tab2Btn.TextSize = 11
+Tab2Btn.Font = Enum.Font.SourceSansBold
+Tab2Btn.Parent = TabContainer
+applyNeonStroke(Tab2Btn, Color3.fromRGB(80, 50, 100), 1)
+
+-- Scrolling Lists
+local Tab1Scroll = Instance.new("ScrollingFrame")
+Tab1Scroll.Size = UDim2.new(1, -10, 1, -68)
+Tab1Scroll.Position = UDim2.new(0, 5, 0, 62)
+Tab1Scroll.BackgroundTransparency = 1
+Tab1Scroll.ScrollBarThickness = 4
+Tab1Scroll.ScrollBarImageColor3 = Color3.fromRGB(255, 0, 128)
+Tab1Scroll.Visible = true
+Tab1Scroll.Parent = MainFrame
+
+local Tab1Layout = Instance.new("UIListLayout")
+Tab1Layout.Padding = UDim.new(0, 4)
+Tab1Layout.SortOrder = Enum.SortOrder.LayoutOrder
+Tab1Layout.Parent = Tab1Scroll
+
+local Tab2Scroll = Instance.new("ScrollingFrame")
+Tab2Scroll.Size = UDim2.new(1, -10, 1, -68)
+Tab2Scroll.Position = UDim2.new(0, 5, 0, 62)
+Tab2Scroll.BackgroundTransparency = 1
+Tab2Scroll.ScrollBarThickness = 4
+Tab2Scroll.ScrollBarImageColor3 = Color3.fromRGB(0, 240, 255)
+Tab2Scroll.Visible = false
+Tab2Scroll.Parent = MainFrame
+
+local Tab2Layout = Instance.new("UIListLayout")
+Tab2Layout.Padding = UDim.new(0, 4)
+Tab2Layout.SortOrder = Enum.SortOrder.LayoutOrder
+Tab2Layout.Parent = Tab2Scroll
+
+-- Resize Grip
+local ResizeGrip = Instance.new("TextButton")
+ResizeGrip.Size = UDim2.new(0, 14, 0, 14)
+ResizeGrip.Position = UDim2.new(1, -14, 1, -14)
+ResizeGrip.BackgroundColor3 = Color3.fromRGB(255, 0, 128)
+ResizeGrip.Text = "◢"
+ResizeGrip.TextColor3 = Color3.fromRGB(255, 255, 255)
+ResizeGrip.TextSize = 10
+ResizeGrip.Parent = MainFrame
+
+--================================================================--
+--                     LOADOUT POP-UP FRAME                       --
+--================================================================--
+local LoadoutFrame = Instance.new("Frame")
+LoadoutFrame.Name = "LoadoutPopUp"
+LoadoutFrame.Size = UDim2.new(0, 230, 0, 210)
+LoadoutFrame.Position = UDim2.new(1, 10, 0, 0)
+LoadoutFrame.BackgroundColor3 = Color3.fromRGB(20, 12, 32)
+LoadoutFrame.Visible = false
+LoadoutFrame.Parent = MainFrame
+
+local LoadoutCorner = Instance.new("UICorner")
+LoadoutCorner.CornerRadius = UDim.new(0, 8)
+LoadoutCorner.Parent = LoadoutFrame
+applyNeonStroke(LoadoutFrame, Color3.fromRGB(255, 0, 128), 1.5)
+
+-- Loadout Title Label
+local LoadoutTitle = Instance.new("TextLabel")
+LoadoutTitle.Size = UDim2.new(1, 0, 0, 24)
+LoadoutTitle.BackgroundTransparency = 1
+LoadoutTitle.Text = "SAVED LOADOUTS"
+LoadoutTitle.TextColor3 = Color3.fromRGB(0, 240, 255)
+LoadoutTitle.TextSize = 11
+LoadoutTitle.Font = Enum.Font.FredokaOne
+LoadoutTitle.Parent = LoadoutFrame
+
+-- Scrollable Loadout List
+local LoadoutScroll = Instance.new("ScrollingFrame")
+LoadoutScroll.Size = UDim2.new(1, -12, 1, -85)
+LoadoutScroll.Position = UDim2.new(0, 6, 0, 26)
+LoadoutScroll.BackgroundTransparency = 1
+LoadoutScroll.ScrollBarThickness = 3
+LoadoutScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 240, 255)
+LoadoutScroll.Parent = LoadoutFrame
+
+local LoadoutListLayout = Instance.new("UIListLayout")
+LoadoutListLayout.Padding = UDim.new(0, 3)
+LoadoutListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+LoadoutListLayout.Parent = LoadoutScroll
+
+-- Bottom Controls Frame
+local BottomPanel = Instance.new("Frame")
+BottomPanel.Size = UDim2.new(1, -10, 0, 52)
+BottomPanel.Position = UDim2.new(0, 5, 1, -56)
+BottomPanel.BackgroundTransparency = 1
+BottomPanel.Parent = LoadoutFrame
+
+-- Loadout Name Input Box
+local LoadoutNameInput = Instance.new("TextBox")
+LoadoutNameInput.Name = "LoadoutNameInput"
+LoadoutNameInput.Size = UDim2.new(1, 0, 0, 22)
+LoadoutNameInput.Position = UDim2.new(0, 0, 0, 0)
+LoadoutNameInput.BackgroundColor3 = Color3.fromRGB(10, 6, 18)
+LoadoutNameInput.PlaceholderText = "[Loadout Name]"
+LoadoutNameInput.PlaceholderColor3 = Color3.fromRGB(120, 120, 150)
+LoadoutNameInput.Text = ""
+LoadoutNameInput.TextColor3 = Color3.fromRGB(0, 240, 255)
+LoadoutNameInput.TextSize = 10
+LoadoutNameInput.Font = Enum.Font.Code
+LoadoutNameInput.ClearTextOnFocus = false
+LoadoutNameInput.Parent = BottomPanel
+applyNeonStroke(LoadoutNameInput, Color3.fromRGB(0, 240, 255), 1)
+
+-- Save, Load, Edit, Delete Action Buttons
+local SaveBtn = Instance.new("TextButton")
+SaveBtn.Size = UDim2.new(0.23, 0, 0, 22)
+SaveBtn.Position = UDim2.new(0, 0, 0, 26)
+SaveBtn.BackgroundColor3 = Color3.fromRGB(25, 55, 35)
+SaveBtn.Text = "{Save}"
+SaveBtn.TextColor3 = Color3.fromRGB(0, 255, 150)
+SaveBtn.TextSize = 10
+SaveBtn.Font = Enum.Font.SourceSansBold
+SaveBtn.Parent = BottomPanel
+applyNeonStroke(SaveBtn, Color3.fromRGB(0, 255, 150), 1)
+
+local LoadBtn = Instance.new("TextButton")
+LoadBtn.Size = UDim2.new(0.23, 0, 0, 22)
+LoadBtn.Position = UDim2.new(0.25, 0, 0, 26)
+LoadBtn.BackgroundColor3 = Color3.fromRGB(20, 45, 65)
+LoadBtn.Text = "{Load}"
+LoadBtn.TextColor3 = Color3.fromRGB(0, 200, 255)
+LoadBtn.TextSize = 10
+LoadBtn.Font = Enum.Font.SourceSansBold
+LoadBtn.Parent = BottomPanel
+applyNeonStroke(LoadBtn, Color3.fromRGB(0, 200, 255), 1)
+
+local EditBtn = Instance.new("TextButton")
+EditBtn.Size = UDim2.new(0.23, 0, 0, 22)
+EditBtn.Position = UDim2.new(0.50, 0, 0, 26)
+EditBtn.BackgroundColor3 = Color3.fromRGB(60, 25, 45)
+EditBtn.Text = "{Edit}"
+EditBtn.TextColor3 = Color3.fromRGB(255, 0, 128)
+EditBtn.TextSize = 10
+EditBtn.Font = Enum.Font.SourceSansBold
+EditBtn.Parent = BottomPanel
+applyNeonStroke(EditBtn, Color3.fromRGB(255, 0, 128), 1)
+
+local DeleteBtn = Instance.new("TextButton")
+DeleteBtn.Size = UDim2.new(0.23, 0, 0, 22)
+DeleteBtn.Position = UDim2.new(0.75, 0, 0, 26)
+DeleteBtn.BackgroundColor3 = Color3.fromRGB(60, 15, 30)
+DeleteBtn.Text = "{Del}"
+DeleteBtn.TextColor3 = Color3.fromRGB(255, 50, 100)
+DeleteBtn.TextSize = 10
+DeleteBtn.Font = Enum.Font.SourceSansBold
+DeleteBtn.Parent = BottomPanel
+applyNeonStroke(DeleteBtn, Color3.fromRGB(255, 50, 100), 1)
+
+local function resetConfirmations()
+    pendingDeleteName = nil
+    pendingEditName = nil
+    DeleteBtn.Text = "{Del}"
+    DeleteBtn.BackgroundColor3 = Color3.fromRGB(60, 15, 30)
+    EditBtn.Text = "{Edit}"
+    EditBtn.BackgroundColor3 = Color3.fromRGB(60, 25, 45)
+end
+
+-- Loadout UI Rendering
+local function renderLoadoutList()
+    for _, item in ipairs(LoadoutScroll:GetChildren()) do
+        if item:IsA("TextButton") then item:Destroy() end
+    end
+
+    for name, _ in pairs(savedLoadouts) do
+        local itemBtn = Instance.new("TextButton")
+        itemBtn.Size = UDim2.new(1, -4, 0, 22)
+        itemBtn.BackgroundColor3 = (selectedLoadoutName == name) and Color3.fromRGB(50, 25, 70) or Color3.fromRGB(26, 16, 40)
+        itemBtn.Text = "  " .. name
+        itemBtn.TextColor3 = (selectedLoadoutName == name) and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(200, 200, 220)
+        itemBtn.TextSize = 10
+        itemBtn.Font = Enum.Font.SourceSansBold
+        itemBtn.TextXAlignment = Enum.TextXAlignment.Left
+        itemBtn.Parent = LoadoutScroll
+        applyNeonStroke(itemBtn, (selectedLoadoutName == name) and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(45, 25, 65), 1)
+
+        itemBtn.MouseButton1Click:Connect(function()
+            if selectedLoadoutName ~= name then
+                resetConfirmations()
+            end
+            selectedLoadoutName = name
+            renderLoadoutList()
+        end)
+    end
+
+    LoadoutScroll.CanvasSize = UDim2.new(0, 0, 0, LoadoutListLayout.AbsoluteContentSize.Y + 5)
+end
+
+--================================================================--
+--                    LOADOUT BUTTON LOGIC                        --
+--================================================================--
+
+-- Save Handler (saves only {#} toggled attributes if any are toggled)
+SaveBtn.MouseButton1Click:Connect(function()
+    resetConfirmations()
+    local name = LoadoutNameInput.Text:match("^%s*(.-)%s*$")
+    if name == "" then return end
+
+    local hasToggledAttributes = false
+    for _, isToggled in pairs(loadoutToggledAttributes) do
+        if isToggled then
+            hasToggledAttributes = true
+            break
+        end
+    end
+
+    local attrSnapshot = {}
+    local lockSnapshot = {}
+
+    for k, v in pairs(LocalPlayer:GetAttributes()) do
+        if not hasToggledAttributes or loadoutToggledAttributes[k] then
+            attrSnapshot[k] = v
+            if lockedAttributes[k] ~= nil then
+                lockSnapshot[k] = lockedAttributes[k]
+            end
+        end
+    end
+
+    savedLoadouts[name] = {
+        attributes = attrSnapshot,
+        locks = lockSnapshot,
+        shield = isShieldOn,
+        mode = currentMode
+    }
+
+    selectedLoadoutName = name
+    saveToFile()
+    renderLoadoutList()
+end)
+
+-- Load Handler
+local function applyLoadout(name)
+    local data = savedLoadouts[name]
+    if not data then return end
+
+    table.clear(lockedAttributes)
+
+    for k, v in pairs(data.attributes) do
+        LocalPlayer:SetAttribute(k, v)
+    end
+
+    for k, v in pairs(data.locks) do
+        lockedAttributes[k] = v
+    end
+
+    isShieldOn = data.shield
+    currentMode = data.mode
+
+    if getgenv().VaporwaveRefreshAttributes then
+        getgenv().VaporwaveRefreshAttributes()
+    end
+end
+
+LoadBtn.MouseButton1Click:Connect(function()
+    resetConfirmations()
+    if selectedLoadoutName then
+        applyLoadout(selectedLoadoutName)
+    end
+end)
+
+-- Edit Handler with Confirmation Highlight
+EditBtn.MouseButton1Click:Connect(function()
+    if not selectedLoadoutName or not savedLoadouts[selectedLoadoutName] then return end
+
+    if pendingEditName ~= selectedLoadoutName then
+        resetConfirmations()
+        pendingEditName = selectedLoadoutName
+        EditBtn.Text = "[SURE?]"
+        EditBtn.BackgroundColor3 = Color3.fromRGB(255, 150, 0)
+    else
+        applyLoadout(selectedLoadoutName)
+        LoadoutNameInput.Text = selectedLoadoutName
+        resetConfirmations()
+        renderLoadoutList()
+    end
+end)
+
+-- Delete Handler with Confirmation Highlight
+DeleteBtn.MouseButton1Click:Connect(function()
+    if not selectedLoadoutName or not savedLoadouts[selectedLoadoutName] then return end
+
+    if pendingDeleteName ~= selectedLoadoutName then
+        resetConfirmations()
+        pendingDeleteName = selectedLoadoutName
+        DeleteBtn.Text = "[SURE?]"
+        DeleteBtn.BackgroundColor3 = Color3.fromRGB(220, 20, 60)
+    else
+        savedLoadouts[selectedLoadoutName] = nil
+        if LoadoutNameInput.Text == selectedLoadoutName then
+            LoadoutNameInput.Text = ""
+        end
+        selectedLoadoutName = nil
+        saveToFile()
+        resetConfirmations()
+        renderLoadoutList()
+    end
+end)
+
+-- Toggle Loadout Popup Visibility
+LoadoutToggleBtn.MouseButton1Click:Connect(function()
+    LoadoutFrame.Visible = not LoadoutFrame.Visible
+end)
+
+-- Interaction Setup
+table.insert(connections, ToggleBtn.MouseButton1Click:Connect(function()
+    MainFrame.Visible = not MainFrame.Visible
+end))
+
+-- Double Click Actions
+local function attachDoubleClick(button, callback)
+    local lastClick = 0
+    local conn = button.MouseButton1Click:Connect(function()
+        local now = tick()
+        if now - lastClick <= 0.35 then callback() lastClick = 0 else lastClick = now end
+    end)
+    table.insert(connections, conn)
+end
+
+attachDoubleClick(CloseBtn, function() fullCleanup() end)
+attachDoubleClick(RevertBtn, function()
+    table.clear(lockedAttributes)
+    for name, originalVal in pairs(originalAttributes) do
+        LocalPlayer:SetAttribute(name, originalVal)
+    end
+    if getgenv().VaporwaveRefreshAttributes then
+        getgenv().VaporwaveRefreshAttributes()
+    end
+end)
+
+-- Tabs Switch
+Tab1Btn.MouseButton1Click:Connect(function()
+    currentTab = 1
+    Tab1Scroll.Visible = true; Tab2Scroll.Visible = false
+    Tab1Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); Tab1Btn.TextColor3 = Color3.fromRGB(0, 240, 255)
+    Tab2Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); Tab2Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
+end)
+
+Tab2Btn.MouseButton1Click:Connect(function()
+    currentTab = 2
+    Tab1Scroll.Visible = false; Tab2Scroll.Visible = true
+    Tab2Btn.BackgroundColor3 = Color3.fromRGB(35, 20, 55); Tab2Btn.TextColor3 = Color3.fromRGB(255, 0, 128)
+    Tab1Btn.BackgroundColor3 = Color3.fromRGB(20, 12, 35); Tab1Btn.TextColor3 = Color3.fromRGB(150, 150, 180)
+end)
+
+-- Dragging & Resizing Logic
+local isDragging, isResizing = false, false
+local dragStart, resizeStart = Vector3.new(), Vector3.new()
+local startPos, startSize = UDim2.new(), UDim2.new()
+
+Header.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = true; dragStart = input.Position; startPos = MainFrame.Position
+    end
+end)
+
+ResizeGrip.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isResizing = true; resizeStart = input.Position; startSize = MainFrame.Size
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        isDragging = false; isResizing = false
+    end
+end)
+
+table.insert(connections, UserInputService.InputChanged:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+        local viewport = workspace.CurrentCamera and workspace.CurrentCamera.ViewportSize or Vector2.new(800, 600)
+        if isDragging then
+            local delta = input.Position - dragStart
+            local newX = math.clamp(startPos.X.Offset + delta.X, 0, viewport.X - MainFrame.AbsoluteSize.X)
+            local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, viewport.Y - MainFrame.AbsoluteSize.Y)
+            MainFrame.Position = UDim2.new(startPos.X.Scale, newX, startPos.Y.Scale, newY)
+        elseif isResizing then
+            local delta = input.Position - resizeStart
+            local newWidth = math.clamp(startSize.X.Offset + delta.X, 260, viewport.X - MainFrame.AbsolutePosition.X)
+            local newHeight = math.clamp(startSize.Y.Offset + delta.Y, 200, viewport.Y - MainFrame.AbsolutePosition.Y)
+            MainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
+        end
+    end
+end))
+
+-- Attribute Rendering
+local function renderAttributes()
+    for _, child in ipairs(Tab1Scroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+    for _, child in ipairs(Tab2Scroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+
+    local attributes = LocalPlayer:GetAttributes()
+    local attrKeys = {}
+    for key in pairs(attributes) do table.insert(attrKeys, key) end
+    table.sort(attrKeys, function(a, b) return a:lower() < b:lower() end)
+
+    for _, attrName in ipairs(attrKeys) do
+        local attrValue = attributes[attrName]
+        local valueType = type(attrValue)
+
+        if valueType == "string" or valueType == "number" then
+            local RowFrame = Instance.new("Frame")
+            RowFrame.Size = UDim2.new(1, -6, 0, 32)
+            RowFrame.BackgroundColor3 = Color3.fromRGB(22, 14, 36)
+            RowFrame.Parent = Tab1Scroll
+            applyNeonStroke(RowFrame, Color3.fromRGB(45, 25, 70), 1)
+
+            local NameLabel = Instance.new("TextLabel")
+            NameLabel.Size = UDim2.new(0.32, -2, 1, 0)
+            NameLabel.Position = UDim2.new(0, 4, 0, 0)
+            NameLabel.BackgroundTransparency = 1
+            NameLabel.Text = attrName
+            NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            NameLabel.TextSize = 10
+            NameLabel.Font = Enum.Font.SourceSansBold
+            NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            NameLabel.Parent = RowFrame
+
+            local InputBox = Instance.new("TextBox")
+            InputBox.Size = UDim2.new(0.38, 0, 0, 18)
+            InputBox.Position = UDim2.new(0.34, 0, 0, 7)
+            InputBox.BackgroundColor3 = Color3.fromRGB(10, 6, 18)
+            InputBox.Text = tostring(attrValue)
+            InputBox.TextColor3 = Color3.fromRGB(0, 240, 255)
+            InputBox.TextSize = 10
+            InputBox.Font = Enum.Font.Code
+            InputBox.ClearTextOnFocus = false
+            InputBox.Parent = RowFrame
+            applyNeonStroke(InputBox, Color3.fromRGB(0, 240, 255), 1)
+
+            local LockBtn = Instance.new("TextButton")
+            LockBtn.Size = UDim2.new(0.11, 0, 0, 20)
+            LockBtn.Position = UDim2.new(0.73, 0, 0, 6)
+            LockBtn.BackgroundColor3 = lockedAttributes[attrName] ~= nil and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(30, 18, 48)
+            LockBtn.Text = "§"
+            LockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            LockBtn.TextSize = 11
+            LockBtn.Font = Enum.Font.SourceSansBold
+            LockBtn.Parent = RowFrame
+            applyNeonStroke(LockBtn, Color3.fromRGB(255, 0, 128), 1)
+
+            local LoadoutToggleAttrBtn = Instance.new("TextButton")
+            LoadoutToggleAttrBtn.Size = UDim2.new(0.13, 0, 0, 20)
+            LoadoutToggleAttrBtn.Position = UDim2.new(0.85, 0, 0, 6)
+            LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
+            LoadoutToggleAttrBtn.Text = "{#}"
+            LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+            LoadoutToggleAttrBtn.TextSize = 10
+            LoadoutToggleAttrBtn.Font = Enum.Font.SourceSansBold
+            LoadoutToggleAttrBtn.Parent = RowFrame
+            applyNeonStroke(LoadoutToggleAttrBtn, Color3.fromRGB(0, 240, 255), 1)
+
+            InputBox.FocusLost:Connect(function(enter)
+                if enter then
+                    local val = (valueType == "number") and (tonumber(InputBox.Text) or attrValue) or InputBox.Text
+                    LocalPlayer:SetAttribute(attrName, val)
+                    if lockedAttributes[attrName] ~= nil then lockedAttributes[attrName] = val end
+                end
+            end)
+
+            LockBtn.MouseButton1Click:Connect(function()
+                if lockedAttributes[attrName] ~= nil then
+                    lockedAttributes[attrName] = nil
+                    LockBtn.BackgroundColor3 = Color3.fromRGB(30, 18, 48)
+                else
+                    lockedAttributes[attrName] = LocalPlayer:GetAttribute(attrName)
+                    LockBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 128)
+                end
+            end)
+
+            LoadoutToggleAttrBtn.MouseButton1Click:Connect(function()
+                loadoutToggledAttributes[attrName] = not loadoutToggledAttributes[attrName]
+                LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
+                LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+            end)
+
+        elseif valueType == "boolean" then
+            local RowFrame = Instance.new("Frame")
+            RowFrame.Size = UDim2.new(1, -6, 0, 32)
+            RowFrame.BackgroundColor3 = Color3.fromRGB(22, 14, 36)
+            RowFrame.Parent = Tab2Scroll
+            applyNeonStroke(RowFrame, Color3.fromRGB(45, 25, 70), 1)
+
+            local NameLabel = Instance.new("TextLabel")
+            NameLabel.Size = UDim2.new(0.32, -2, 1, 0)
+            NameLabel.Position = UDim2.new(0, 4, 0, 0)
+            NameLabel.BackgroundTransparency = 1
+            NameLabel.Text = attrName
+            NameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+            NameLabel.TextSize = 10
+            NameLabel.Font = Enum.Font.SourceSansBold
+            NameLabel.TextXAlignment = Enum.TextXAlignment.Left
+            NameLabel.Parent = RowFrame
+
+            local CheckBox = Instance.new("TextButton")
+            CheckBox.Size = UDim2.new(0.38, 0, 0, 20)
+            CheckBox.Position = UDim2.new(0.34, 0, 0, 6)
+            CheckBox.BackgroundColor3 = attrValue and Color3.fromRGB(0, 180, 120) or Color3.fromRGB(60, 20, 30)
+            CheckBox.Text = attrValue and "[ TRUE ]" or "[ FALSE ]"
+            CheckBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+            CheckBox.TextSize = 9
+            CheckBox.Font = Enum.Font.Code
+            CheckBox.Parent = RowFrame
+            applyNeonStroke(CheckBox, attrValue and Color3.fromRGB(0, 255, 150) or Color3.fromRGB(255, 50, 80), 1)
+
+            local LockBtn = Instance.new("TextButton")
+            LockBtn.Size = UDim2.new(0.11, 0, 0, 20)
+            LockBtn.Position = UDim2.new(0.73, 0, 0, 6)
+            LockBtn.BackgroundColor3 = lockedAttributes[attrName] ~= nil and Color3.fromRGB(255, 0, 128) or Color3.fromRGB(30, 18, 48)
+            LockBtn.Text = "§"
+            LockBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            LockBtn.TextSize = 11
+            LockBtn.Font = Enum.Font.SourceSansBold
+            LockBtn.Parent = RowFrame
+            applyNeonStroke(LockBtn, Color3.fromRGB(255, 0, 128), 1)
+
+            local LoadoutToggleAttrBtn = Instance.new("TextButton")
+            LoadoutToggleAttrBtn.Size = UDim2.new(0.13, 0, 0, 20)
+            LoadoutToggleAttrBtn.Position = UDim2.new(0.85, 0, 0, 6)
+            LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
+            LoadoutToggleAttrBtn.Text = "{#}"
+            LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+            LoadoutToggleAttrBtn.TextSize = 10
+            LoadoutToggleAttrBtn.Font = Enum.Font.SourceSansBold
+            LoadoutToggleAttrBtn.Parent = RowFrame
+            applyNeonStroke(LoadoutToggleAttrBtn, Color3.fromRGB(0, 240, 255), 1)
+
+            CheckBox.MouseButton1Click:Connect(function()
+                local newVal = not LocalPlayer:GetAttribute(attrName)
+                LocalPlayer:SetAttribute(attrName, newVal)
+                if lockedAttributes[attrName] ~= nil then lockedAttributes[attrName] = newVal end
+            end)
+
+            LockBtn.MouseButton1Click:Connect(function()
+                if lockedAttributes[attrName] ~= nil then
+                    lockedAttributes[attrName] = nil
+                    LockBtn.BackgroundColor3 = Color3.fromRGB(30, 18, 48)
+                else
+                    lockedAttributes[attrName] = LocalPlayer:GetAttribute(attrName)
+                    LockBtn.BackgroundColor3 = Color3.fromRGB(255, 0, 128)
+                end
+            end)
+
+            LoadoutToggleAttrBtn.MouseButton1Click:Connect(function()
+                loadoutToggledAttributes[attrName] = not loadoutToggledAttributes[attrName]
+                LoadoutToggleAttrBtn.BackgroundColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 240, 255) or Color3.fromRGB(30, 18, 48)
+                LoadoutToggleAttrBtn.TextColor3 = loadoutToggledAttributes[attrName] and Color3.fromRGB(0, 0, 0) or Color3.fromRGB(255, 255, 255)
+            end)
+        end
+    end
+
+    Tab1Scroll.CanvasSize = UDim2.new(0, 0, 0, Tab1Layout.AbsoluteContentSize.Y + 10)
+    Tab2Scroll.CanvasSize = UDim2.new(0, 0, 0, Tab2Layout.AbsoluteContentSize.Y + 10)
+end
+
+getgenv().VaporwaveRefreshAttributes = renderAttributes
+
+-- Continuous Lock Loop
+table.insert(connections, RunService.Heartbeat:Connect(function()
+    for attrName, forcedValue in pairs(lockedAttributes) do
+        if LocalPlayer:GetAttribute(attrName) ~= forcedValue then
+            LocalPlayer:SetAttribute(attrName, forcedValue)
+        end
+    end
+end))
+
+table.insert(connections, LocalPlayer.AttributeChanged:Connect(function()
+    renderAttributes()
+end))
+
+renderAttributes()
+renderLoadoutList()
