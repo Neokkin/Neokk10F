@@ -426,6 +426,7 @@ local function UpdateGeyserIndicator(area)
     local existingRedirect = area.Part:FindFirstChild("RedirectIndicator")
     local leftWall = area.Part:FindFirstChild("HallwayLeftWall")
     local rightWall = area.Part:FindFirstChild("HallwayRightWall")
+    local centerWall = area.Part:FindFirstChild("CenterWall")
     
     if not geyserActive and existingGeyser then
         existingGeyser:Destroy()
@@ -476,6 +477,21 @@ local function UpdateGeyserIndicator(area)
         rightWall.Size = Vector3.new(0.5, size.Y, size.Z)
         rightWall.CFrame = cf * CFrame.new(size.X / 2, 0, 0)
     end
+
+
+    if not centerWall then
+        centerWall = Instance.new("Part")
+        centerWall.Name = "CenterWall"
+        centerWall.Anchored = true
+        centerWall.CanCollide = false
+        centerWall.CanTouch = true
+        centerWall.CanQuery = false
+        centerWall.Transparency = 1
+        centerWall.Parent = area.Part
+    end
+
+    centerWall.Size = Vector3.new(0.1, size.Y, size.Z)
+    centerWall.CFrame = cf
 
     if geyserActive then
         if not existingGeyser then
@@ -618,6 +634,20 @@ local function IsPointInPart(point, part)
     return math.abs(localPoint.X) <= size.X 
        and math.abs(localPoint.Y) <= size.Y 
        and math.abs(localPoint.Z) <= size.Z
+end
+
+
+local function IsCheckInActive(hrpPosition, area, isFirstTouch)
+    if not area or not area.Part then return false end
+    if isFirstTouch then
+        return IsPointInPart(hrpPosition, area.Part)
+    else
+        local centerWall = area.Part:FindFirstChild("CenterWall")
+        if centerWall then
+            return IsPointInPart(hrpPosition, centerWall)
+        end
+        return false
+    end
 end
 
 --------------------------------------------------------------------------
@@ -2374,7 +2404,13 @@ MakeCorner(BtnTouchCheck, 4)
 
 BtnTouchCheck.MouseButton1Click:Connect(function()
     local target = SelectedArea or AreaConfig
-    target.ConditionType = (target.ConditionType == "Touch Check") and "Inside Check" or "Touch Check"
+    if target.ConditionType == "Touch Check" then
+        target.ConditionType = "Inside Check"
+    elseif target.ConditionType == "Inside Check" then
+        target.ConditionType = "Check In"
+    else
+        target.ConditionType = "Touch Check"
+    end
     BtnTouchCheck.Text = "Mode: " .. target.ConditionType
     UpdateInfoGui()
 end)
